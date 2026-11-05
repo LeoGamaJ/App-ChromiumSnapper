@@ -1,0 +1,6 @@
+{
+  "name": "Bulk Full-Page Screenshot Tool",
+  "description": "Captura automatizada de screenshots de página inteira (full-page) em lote com Chromium headless, autoscroll para lazy load, pré-visualização instantânea e download em ZIP.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
