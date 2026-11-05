@@ -9,9 +9,46 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
+const MAX_BATCH_URLS = 50;
+const MIN_VIEWPORT = 320;
+const MAX_VIEWPORT_WIDTH = 7680;
+const MAX_VIEWPORT_HEIGHT = 4320;
+const ALLOWED_FORMATS = new Set(['png', 'webp', 'jpg', 'pdf']);
+const ALLOWED_COLOR_SCHEMES = new Set(['no-preference', 'light', 'dark']);
+
+app.disable('x-powered-by');
 app.use(express.json({ limit: '100mb' }));
+
+async function closePageQuietly(page: any): Promise<void> {
+  if (!page) return;
+  try {
+    await Promise.race([
+      page.close(),
+      new Promise<void>((resolve) => setTimeout(resolve, 3000)),
+    ]);
+  } catch {
+    // The page may already be gone after a failed navigation.
+  }
+}
+
+// Navigate with a fast-path and a fallback, failing loudly when the target is
+// unreachable so Chromium's internal error page is never captured as content.
+async function navigateToTarget(page: any, url: string): Promise<void> {
+  try {
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 35000 });
+    return;
+  } catch (primaryError: any) {
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      return;
+    } catch (fallbackError: any) {
+      const detail = fallbackError?.message || primaryError?.message || 'Falha de navegação';
+      throw new Error(`Não foi possível acessar ${url}. ${detail}`);
+    }
+  }
+}
 
 // Helper to sanitize URL
 function normalizeUrl(rawUrl: string): string {
@@ -24,6 +61,37 @@ function normalizeUrl(rawUrl: string): string {
     url = 'https://' + url;
   }
   return url;
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(parsed)));
+}
+
+function normalizeFormat(value: unknown): 'png' | 'webp' | 'jpg' | 'pdf' {
+  const format = typeof value === 'string' ? value.toLowerCase() : '';
+  return (ALLOWED_FORMATS.has(format) ? format : 'webp') as 'png' | 'webp' | 'jpg' | 'pdf';
+}
+
+function normalizeColorScheme(value: unknown): 'no-preference' | 'light' | 'dark' {
+  return (typeof value === 'string' && ALLOWED_COLOR_SCHEMES.has(value)
+    ? value
+    : 'no-preference') as 'no-preference' | 'light' | 'dark';
+}
+
+function sanitizeNamingPattern(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) return '[ordem]_[url]_[resolucao]';
+  return value.trim().slice(0, 120);
+}
+
+function safeZipEntryName(rawName: unknown, fallback: string): string {
+  if (typeof rawName !== 'string' || !rawName.trim()) return fallback;
+  const base = path
+    .basename(rawName.replace(/\\/g, '/'))
+    .replace(/[^\w.\-]+/g, '_')
+    .replace(/^\.+/, '');
+  return base.slice(0, 120) || fallback;
 }
 
 // Customizable file naming pattern
@@ -480,7 +548,9 @@ async function waitForAllImagesDecoded(page: any, timeoutMs = 8000) {
   }, timeoutMs);
 }
 
-// Remove common intrusive cookie/consent overlays if requested
+// Remove common intrusive cookie/consent overlays if requested. Besides the
+// well-known CMP selectors, this detects floating consent layers by text and
+// accepts them before hiding, which covers regional implementations (LGPD/GDPR).
 async function dismissConsentOverlays(page: any) {
   try {
     await page.evaluate(() => {
@@ -492,6 +562,11 @@ async function dismissConsentOverlays(page: any) {
         '[class*="consent"]',
         '[class*="cookie"]',
         '[id*="cookie"]',
+        '[id*="lgpd"]',
+        '[class*="lgpd"]',
+        '[class*="privacidade"]',
+        '[aria-label*="cookie" i]',
+        '[aria-label*="consent" i]',
         '.optanon-alert-box-wrapper',
         '.didomi-popup-container',
         '#didomi-host',
@@ -502,54 +577,145 @@ async function dismissConsentOverlays(page: any) {
       selectors.forEach((sel) => {
         document.querySelectorAll(sel).forEach((el) => {
           try {
-            (el as HTMLElement).style.display = 'none';
+            (el as HTMLElement).style.setProperty('display', 'none', 'important');
           } catch {}
         });
       });
+
+      const consentText =
+        /cookie|consent|privacidade|lgpd|gdpr|aceitar|concordar|termos de uso|personalizar prefer/i;
+      const acceptText = /^(aceitar|aceito|concordo|continuar|entendi|permitir|ok\b|got it|accept|agree)/i;
+
+      // Detect floating overlays covering a meaningful part of the viewport.
+      const candidates = Array.from(document.querySelectorAll<HTMLElement>('body *')).filter(
+        (el) => {
+          if (el.closest('header nav')) return false;
+          const style = window.getComputedStyle(el);
+          if (style.position !== 'fixed' && style.position !== 'absolute') return false;
+          if (style.display === 'none' || style.visibility === 'hidden') return false;
+          if (Number(style.opacity) === 0) return false;
+
+          const zIndex = Number.parseInt(style.zIndex, 10);
+          if (Number.isFinite(zIndex) && zIndex < 10) return false;
+
+          const rect = el.getBoundingClientRect();
+          if (rect.width < 180 || rect.height < 80) return false;
+          if (rect.width * rect.height < window.innerWidth * window.innerHeight * 0.02) return false;
+
+          return consentText.test((el.textContent || '').slice(0, 4000));
+        }
+      );
+
+      candidates.slice(0, 6).forEach((overlay) => {
+        const buttons = Array.from(
+          overlay.querySelectorAll<HTMLElement>('button, a, [role="button"]')
+        );
+        const acceptButton = buttons.find((button) => {
+          const label = (button.textContent || '').trim();
+          return label.length > 0 && label.length < 60 && acceptText.test(label);
+        });
+
+        if (acceptButton) {
+          try {
+            acceptButton.click();
+          } catch {}
+        }
+
+        try {
+          overlay.style.setProperty('display', 'none', 'important');
+          overlay.style.setProperty('visibility', 'hidden', 'important');
+        } catch {}
+      });
     });
+
+    // Some CMPs close on Escape instead of exposing an accept button.
+    await page.keyboard.press('Escape').catch(() => {});
   } catch {}
 }
 
 // Health endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
+app.get('/api/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'chromium-snapper',
+    version: '1.1.0',
+    engine: 'puppeteer/chromium-headless',
+    maxBatchUrls: MAX_BATCH_URLS,
+    formats: Array.from(ALLOWED_FORMATS),
+    time: new Date().toISOString(),
+  });
 });
 
 // SSE Streaming Batch Endpoint for Interactive UI
 app.post('/api/screenshot/stream', async (req: Request, res: Response) => {
   const {
-    urls,
-    format = 'webp',
-    quality = 85,
-    width = 1920,
-    height = 1080,
-    fullPage = true,
-    enableAutoScroll = true,
-    delayMs = 1200,
-    heroWaitMs = 2000,
-    stabilizeTextures = true,
-    removeExcessGrain = false,
-    hideCookieBanners = true,
-    colorScheme = 'no-preference',
-    namingPattern = '[ordem]_[url]_[resolucao]',
-    customHeaders = '',
-    customCookies = '',
-  } = req.body;
+    urls: rawUrls,
+    format: rawFormat = 'webp',
+    quality: rawQuality = 85,
+    width: rawWidth = 1920,
+    height: rawHeight = 1080,
+    fullPage: rawFullPage = true,
+    enableAutoScroll: rawAutoScroll = true,
+    delayMs: rawDelayMs = 1200,
+    heroWaitMs: rawHeroWaitMs = 2000,
+    stabilizeTextures: rawStabilizeTextures = true,
+    removeExcessGrain: rawRemoveGrain = false,
+    hideCookieBanners: rawHideCookieBanners = true,
+    colorScheme: rawColorScheme = 'no-preference',
+    namingPattern: rawNamingPattern = '[ordem]_[url]_[resolucao]',
+    customHeaders: rawHeaders = '',
+    customCookies: rawCookies = '',
+  } = req.body ?? {};
 
-  if (!urls || !Array.isArray(urls) || urls.length === 0) {
+  if (!Array.isArray(rawUrls) || rawUrls.length === 0) {
     return res.status(400).json({ error: 'Nenhuma URL fornecida.' });
   }
+
+  const validUrls = rawUrls
+    .filter((u): u is string => typeof u === 'string')
+    .map((u) => normalizeUrl(u))
+    .filter(Boolean)
+    .slice(0, MAX_BATCH_URLS);
+
+  if (validUrls.length === 0) {
+    return res.status(400).json({ error: 'Nenhuma URL válida foi fornecida.' });
+  }
+
+  const width = clampNumber(rawWidth, MIN_VIEWPORT, MAX_VIEWPORT_WIDTH, 1920);
+  const height = clampNumber(rawHeight, MIN_VIEWPORT, MAX_VIEWPORT_HEIGHT, 1080);
+  const format = normalizeFormat(rawFormat);
+  const quality = clampNumber(rawQuality, 10, 100, 85);
+  const delayMs = clampNumber(rawDelayMs, 0, 5000, 1200);
+  const heroWaitMs = clampNumber(rawHeroWaitMs, 0, 10000, 2000);
+  const colorScheme = normalizeColorScheme(rawColorScheme);
+  const namingPattern = sanitizeNamingPattern(rawNamingPattern);
+  const customHeaders = typeof rawHeaders === 'string' ? rawHeaders : '';
+  const customCookies = typeof rawCookies === 'string' ? rawCookies : '';
+  const fullPage = Boolean(rawFullPage);
+  const enableAutoScroll = Boolean(rawAutoScroll);
+  const stabilizeTextures = Boolean(rawStabilizeTextures);
+  const removeExcessGrain = Boolean(rawRemoveGrain);
+  const hideCookieBanners = Boolean(rawHideCookieBanners);
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders?.();
 
+  let clientDisconnected = false;
+  res.on('close', () => {
+    if (!res.writableEnded) clientDisconnected = true;
+  });
+
   const sendEvent = (event: string, data: any) => {
+    if (clientDisconnected || res.writableEnded) return;
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
-  const validUrls = urls.map((u: string) => normalizeUrl(u)).filter(Boolean);
+  const heartbeat = setInterval(() => {
+    if (!clientDisconnected && !res.writableEnded) res.write(': ping\n\n');
+  }, 15000);
 
   sendEvent('start', {
     total: validUrls.length,
@@ -575,6 +741,7 @@ app.post('/api/screenshot/stream', async (req: Request, res: Response) => {
     const parsedHeaders = parseCustomHeaders(customHeaders);
 
     for (let i = 0; i < validUrls.length; i++) {
+      if (clientDisconnected) break;
       const url = validUrls[i];
       const startTime = Date.now();
 
@@ -624,11 +791,7 @@ app.post('/api/screenshot/stream', async (req: Request, res: Response) => {
           status: 'Carregando DOM e assets com headers/cookies aplicados...',
         });
 
-        try {
-          await page.goto(url, { waitUntil: 'networkidle2', timeout: 35000 });
-        } catch {
-          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
-        }
+        await navigateToTarget(page, url);
 
         if (hideCookieBanners) {
           await dismissConsentOverlays(page);
@@ -700,20 +863,26 @@ app.post('/api/screenshot/stream', async (req: Request, res: Response) => {
         // Apply visibility styles right before capture
         await injectLazyLoadVisibilityStyles(page);
 
-        // Calculate final real dimensions
-        const dimensions = await page.evaluate(() => ({
+        // Calculate final real dimensions. In viewport mode the reported height
+        // must reflect what was actually captured, not the full document.
+        const pageMetrics = await page.evaluate(() => ({
           pageWidth: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
           pageHeight: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
         }));
+        const dimensions = {
+          pageWidth: pageMetrics.pageWidth || width,
+          pageHeight: fullPage ? pageMetrics.pageHeight || height : height,
+        };
 
-        // Format custom file name based on token pattern
+        // Format custom file name based on token pattern. [resolucao] always
+        // reflects the requested viewport so the UI preview matches the file.
         const fileName = formatCustomFileName({
           pattern: namingPattern,
           url,
           index: i,
           format,
-          width: dimensions.pageWidth,
-          height: dimensions.pageHeight,
+          width,
+          height,
         });
 
         sendEvent('item_step', {
@@ -808,19 +977,18 @@ app.post('/api/screenshot/stream', async (req: Request, res: Response) => {
         });
       } finally {
         if (page) {
-          try {
-            await page.close();
-          } catch {}
+          await closePageQuietly(page);
         }
       }
     }
 
     sendEvent('complete', { timestamp: Date.now() });
-    res.end();
+    if (!clientDisconnected && !res.writableEnded) res.end();
   } catch (err: any) {
     sendEvent('fatal_error', { error: err?.message || 'Erro fatal no Chromium' });
-    res.end();
+    if (!clientDisconnected && !res.writableEnded) res.end();
   } finally {
+    clearInterval(heartbeat);
     if (browser) {
       try {
         await browser.close();
@@ -832,26 +1000,48 @@ app.post('/api/screenshot/stream', async (req: Request, res: Response) => {
 // Classic Batch ZIP Endpoint
 app.post('/api/screenshot', async (req: Request, res: Response) => {
   const {
-    urls,
-    format = 'png',
-    quality = 80,
-    width = 1920,
-    height = 1080,
-    fullPage = true,
-    enableAutoScroll = true,
-    delayMs = 1200,
-    heroWaitMs = 2000,
-    stabilizeTextures = true,
-    removeExcessGrain = false,
-    hideCookieBanners = true,
-    namingPattern = '[ordem]_[url]_[resolucao]',
-    customHeaders = '',
-    customCookies = '',
-  } = req.body;
+    urls: rawUrls,
+    format: rawFormat = 'png',
+    quality: rawQuality = 80,
+    width: rawWidth = 1920,
+    height: rawHeight = 1080,
+    fullPage: rawFullPage = true,
+    enableAutoScroll: rawAutoScroll = true,
+    delayMs: rawDelayMs = 1200,
+    heroWaitMs: rawHeroWaitMs = 2000,
+    stabilizeTextures: rawStabilizeTextures = true,
+    removeExcessGrain: rawRemoveGrain = false,
+    hideCookieBanners: rawHideCookieBanners = true,
+    namingPattern: rawNamingPattern = '[ordem]_[url]_[resolucao]',
+    customHeaders: rawHeaders = '',
+    customCookies: rawCookies = '',
+  } = req.body ?? {};
 
-  if (!urls || !Array.isArray(urls) || urls.length === 0) {
+  if (!Array.isArray(rawUrls) || rawUrls.length === 0) {
     return res.status(400).json({ error: 'Nenhuma URL fornecida.' });
   }
+
+  const urls = rawUrls
+    .filter((u): u is string => typeof u === 'string')
+    .slice(0, MAX_BATCH_URLS);
+  if (urls.length === 0) {
+    return res.status(400).json({ error: 'Nenhuma URL válida foi fornecida.' });
+  }
+
+  const format = normalizeFormat(rawFormat);
+  const quality = clampNumber(rawQuality, 10, 100, 80);
+  const width = clampNumber(rawWidth, MIN_VIEWPORT, MAX_VIEWPORT_WIDTH, 1920);
+  const height = clampNumber(rawHeight, MIN_VIEWPORT, MAX_VIEWPORT_HEIGHT, 1080);
+  const delayMs = clampNumber(rawDelayMs, 0, 5000, 1200);
+  const heroWaitMs = clampNumber(rawHeroWaitMs, 0, 10000, 2000);
+  const namingPattern = sanitizeNamingPattern(rawNamingPattern);
+  const customHeaders = typeof rawHeaders === 'string' ? rawHeaders : '';
+  const customCookies = typeof rawCookies === 'string' ? rawCookies : '';
+  const fullPage = Boolean(rawFullPage);
+  const enableAutoScroll = Boolean(rawAutoScroll);
+  const stabilizeTextures = Boolean(rawStabilizeTextures);
+  const removeExcessGrain = Boolean(rawRemoveGrain);
+  const hideCookieBanners = Boolean(rawHideCookieBanners);
 
   let browser: Browser | null = null;
   const zip = new JSZip();
@@ -893,11 +1083,7 @@ app.post('/api/screenshot', async (req: Request, res: Response) => {
           } catch {}
         }
 
-        try {
-          await page.goto(url, { waitUntil: 'networkidle2', timeout: 35000 });
-        } catch {
-          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
-        }
+        await navigateToTarget(page, url);
 
         if (hideCookieBanners) {
           await dismissConsentOverlays(page);
@@ -931,18 +1117,22 @@ app.post('/api/screenshot', async (req: Request, res: Response) => {
           await new Promise((r) => setTimeout(r, Math.min(delayMs, 5000)));
         }
 
-        const dimensions = await page.evaluate(() => ({
+        const pageMetrics = await page.evaluate(() => ({
           pageWidth: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
           pageHeight: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
         }));
+        const dimensions = {
+          pageWidth: pageMetrics.pageWidth || width,
+          pageHeight: fullPage ? pageMetrics.pageHeight || height : height,
+        };
 
         const fileName = formatCustomFileName({
           pattern: namingPattern,
           url,
           index: i,
           format,
-          width: dimensions.pageWidth,
-          height: dimensions.pageHeight,
+          width,
+          height,
         });
 
         if (format === 'pdf') {
@@ -953,7 +1143,7 @@ app.post('/api/screenshot', async (req: Request, res: Response) => {
             margin: { top: '0px', right: '0px', bottom: '0px', left: '0px' },
             pageRanges: '1',
           });
-          zip.file(fileName, pdfBuffer);
+          zip.file(safeZipEntryName(fileName, `capture_${i + 1}.${format}`), pdfBuffer);
         } else {
           const puppeteerFormat = format === 'jpg' ? 'jpeg' : format;
           const screenshotOptions: any = {
@@ -969,15 +1159,13 @@ app.post('/api/screenshot', async (req: Request, res: Response) => {
           if (!buffer || buffer.length === 0) {
             buffer = (await page.screenshot({ fullPage: false, type: puppeteerFormat })) as unknown as Buffer;
           }
-          zip.file(fileName, buffer);
+          zip.file(safeZipEntryName(fileName, `capture_${i + 1}.${format}`), buffer);
         }
       } catch (err: any) {
-        zip.file(`ERRO_${i + 1}.txt`, `Erro ao processar ${url}: ${err.message}`);
+        zip.file(`erro_${String(i + 1).padStart(2, '0')}.txt`, `Erro ao processar ${url}: ${err.message}`);
       } finally {
         if (page) {
-          try {
-            await page.close();
-          } catch {}
+          await closePageQuietly(page);
         }
       }
     }
@@ -1018,12 +1206,15 @@ app.post('/api/screenshot/pack-zip', async (req: Request, res: Response) => {
   try {
     const zip = new JSZip();
 
-    for (const item of items) {
-      if (item.dataUrl) {
+    for (const [index, item] of items.slice(0, 100).entries()) {
+      if (typeof item?.dataUrl === 'string' && item.dataUrl.startsWith('data:')) {
         const base64Content = item.dataUrl.split(',')[1];
         if (base64Content) {
           const buffer = Buffer.from(base64Content, 'base64');
-          zip.file(item.fileName || `capture_${Date.now()}.${item.format || 'png'}`, buffer);
+          const fallbackName = `capture_${String(index + 1).padStart(2, '0')}.${
+            normalizeFormat(item.format)
+          }`;
+          zip.file(safeZipEntryName(item.fileName, fallbackName), buffer);
         }
       }
     }
@@ -1046,11 +1237,29 @@ app.post('/api/screenshot/pack-zip', async (req: Request, res: Response) => {
   }
 });
 
+// Normalize JSON/body errors into a consistent API response
+app.use((err: any, _req: any, res: Response, _next: any) => {
+  console.error('Erro na requisição:', err?.message || err);
+  if (res.headersSent) return;
+  const status = Number(err?.status) || 500;
+  res.status(status).json({
+    error:
+      status === 413
+        ? 'Payload muito grande para o servidor.'
+        : err?.message || 'Erro interno no servidor.',
+  });
+});
+
+// Unknown API routes must not fall through to the SPA shell
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: 'Endpoint de API não encontrado.' });
+});
+
 // Setup Vite middleware in dev or static files in production
 async function startServer() {
   if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.resolve(__dirname, 'dist')));
-    app.get('*', (req, res) => {
+    app.get('*', (_req, res) => {
       res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
     });
   } else {
