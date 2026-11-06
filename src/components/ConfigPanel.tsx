@@ -278,7 +278,7 @@ export function ConfigPanel({
 
         <p className="mt-2.5 flex items-center justify-center gap-1.5 text-[10.5px] text-slate-600">
           <ShieldCheck className="h-3 w-3 text-emerald-500/70" />
-          Processamento 100% local via Chromium headless
+          Processamento 100% local e seguro
         </p>
       </div>
     </section>
@@ -695,7 +695,7 @@ function OutputTab({
                     <span
                       className={cn(
                         'rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-[0.08em]',
-                        option.badge === 'PRO'
+                        option.badge === 'Vetorial'
                           ? 'bg-rose-400/10 text-rose-300 ring-1 ring-rose-400/20'
                           : 'bg-amber-400/10 text-amber-300 ring-1 ring-amber-400/20'
                       )}

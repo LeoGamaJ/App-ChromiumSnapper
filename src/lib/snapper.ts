@@ -122,7 +122,7 @@ export interface FormatOption {
   label: string;
   note: string;
   icon: LucideIcon;
-  badge?: 'Recomendado' | 'PRO';
+  badge?: 'Recomendado' | 'Vetorial';
   tone: 'amber' | 'rose' | 'emerald' | 'slate';
 }
 
@@ -140,7 +140,7 @@ export const FORMAT_OPTIONS: FormatOption[] = [
     label: 'PDF',
     note: 'Documento vetorial contínuo de alta precisão.',
     icon: FileText,
-    badge: 'PRO',
+    badge: 'Vetorial',
     tone: 'rose',
   },
   {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import JSZip from 'jszip';
-import { FileText, ShieldCheck, Sparkles, Zap } from 'lucide-react';
+import { LandingPage } from './components/LandingPage';
 import { ConfigPanel } from './components/ConfigPanel';
 import { PreviewDialog } from './components/PreviewDialog';
 import { ResultsPanel, type GalleryFilter } from './components/ResultsPanel';
@@ -108,6 +108,7 @@ export default function App() {
   const [zipState, setZipState] = useState({ active: false, done: 0, total: 0 });
   const [clearArmed, setClearArmed] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [view, setView] = useState<'landing' | 'app'>('landing');
 
   const runningRef = useRef(false);
   const zipActiveRef = useRef(false);
@@ -206,7 +207,7 @@ export default function App() {
       setProgress({
         total: sanitized.length,
         finished: 0,
-        statusText: `Preparando o Chromium headless para ${sanitized.length} ${
+        statusText: `Iniciando a captura para ${sanitized.length} ${
           sanitized.length === 1 ? 'link' : 'links'
         }...`,
         step: 'init',
@@ -583,6 +584,7 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (view !== 'app') return;
       const modifier = event.metaKey || event.ctrlKey;
       if (modifier && event.key === 'Enter') {
         event.preventDefault();
@@ -593,7 +595,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [runCapture, urls]);
+  }, [runCapture, urls, view]);
 
   /* --------------------------------- Render --------------------------------- */
 
@@ -604,6 +606,15 @@ export default function App() {
   const previewItem = previewId
     ? previewableItems.find((item) => item.id === previewId) ?? null
     : null;
+
+  if (view === 'landing') {
+    return (
+      <>
+        <LandingPage onLogin={() => setView('app')} />
+        <ToastStack toasts={toasts} onDismiss={dismissToast} />
+      </>
+    );
+  }
 
   return (
     <div className="app-bg relative min-h-screen">
@@ -620,48 +631,10 @@ export default function App() {
           onStop={handleStop}
           onZip={handleZip}
           onShowShortcuts={() => setShortcutsOpen(true)}
+          onNavigateHome={() => setView('landing')}
         />
 
-        <main className="mx-auto w-full max-w-[1440px] flex-1 px-5 pb-8 pt-7 lg:px-8">
-          <div className="mb-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-            <div className="min-w-0">
-              <span className="eyebrow">
-                <Sparkles className="h-3 w-3" />
-                Batch capture suite
-              </span>
-              <h1 className="mt-2.5 text-[26px] font-extrabold leading-[1.08] tracking-[-0.035em] text-white sm:text-[30px]">
-                Capturas full-page,
-                <span className="block text-amber-300/90 sm:inline sm:text-amber-300/90">
-                  {' '}
-                  prontas para produção.
-                </span>
-              </h1>
-              <p className="mt-2 max-w-xl text-[12px] leading-relaxed text-slate-400 sm:text-[12.5px]">
-                Renderize páginas inteiras com Chromium headless, hidratação de mídia e
-                estabilização de texturas — revise e exporte em um único fluxo.
-              </p>
-            </div>
-
-            <div className="hidden flex-wrap items-center gap-1.5 md:flex">
-              <span className="chip">
-                <Zap className="text-amber-400" />
-                Full-page
-              </span>
-              <span className="chip">
-                <FileText className="text-rose-300/80" />
-                PDF vetorial
-              </span>
-              <span className="chip">
-                <ShieldCheck className="text-emerald-400/80" />
-                Auth bypass
-              </span>
-              <span className="chip">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                Local-first
-              </span>
-            </div>
-          </div>
-
+        <main className="mx-auto w-full max-w-[1440px] flex-1 px-5 pb-8 pt-6 lg:px-8">
           <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12 lg:gap-6">
             <div className="min-w-0 lg:col-span-5">
               <ConfigPanel

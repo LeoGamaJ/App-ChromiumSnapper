@@ -302,7 +302,7 @@ function StatusCard({
                 Capturando {current} de {progress.total}
               </p>
               <p className="mt-0.5 truncate text-[11px] text-slate-400">
-                {progress.statusText || 'Preparando o Chromium headless...'}
+                {progress.statusText || 'Preparando o ambiente de captura...'}
               </p>
             </div>
           </div>
