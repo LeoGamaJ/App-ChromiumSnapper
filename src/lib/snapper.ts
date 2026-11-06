@@ -15,6 +15,7 @@ import {
 
 export type OutputFormat = 'webp' | 'png' | 'jpg' | 'pdf';
 export type ColorScheme = 'no-preference' | 'light' | 'dark';
+export type CaptureStatus = 'pending' | 'processing' | 'success' | 'error';
 
 export const MAX_URLS = 50;
 export const MIN_WIDTH = 320;
@@ -43,14 +44,20 @@ export interface CapturedItem {
   url: string;
   fileName: string;
   format: OutputFormat;
+  status: CaptureStatus;
+  step?: string;
   byteSize: number;
   dimensions: {
     pageWidth: number;
     pageHeight: number;
   };
   durationMs: number;
-  dataUrl: string;
+  /** Thumbnail leve usada no canvas. */
   previewDataUrl?: string;
+  /** Arquivo final servido sob demanda pelo backend. */
+  fileUrl?: string;
+  batchId?: string;
+  itemId?: string;
   error?: string;
   capturedAt: string;
   imgStats?: {
@@ -241,6 +248,46 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/** YYYY-MM-DD no fuso local do navegador (evita a virada de dia do UTC). */
+export function localDateString(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/** Normaliza um nome digitado pelo usuário para um nome de arquivo seguro. */
+export function sanitizeFileName(raw: string, fallback = 'captura'): string {
+  const normalized = raw
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\\/:*?"<>|]+/g, '_')
+    .replace(/\s+/g, '-')
+    .replace(/[^a-zA-Z0-9._-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^[._-]+/, '')
+    .slice(0, 100);
+  return normalized || fallback;
+}
+
+/** Garante que o nome use exatamente a extensão do formato capturado. */
+export function ensureFileNameExtension(name: string, format: OutputFormat): string {
+  const base = name.replace(/\.(png|jpe?g|webp|pdf)$/i, '');
+  return `${base || 'captura'}.${format}`;
+}
+
+export function isCaptured(item: CapturedItem): boolean {
+  return item.status === 'success' && Boolean(item.fileUrl) && !item.error;
+}
+
+export function isPending(item: CapturedItem): boolean {
+  return item.status === 'pending' || item.status === 'processing';
+}
+
+export function isFailed(item: CapturedItem): boolean {
+  return item.status === 'error' || Boolean(item.error);
+}
+
 export function parseUrls(raw: string): string[] {
   return raw
     .split('\n')
@@ -315,7 +362,7 @@ export function formatClock(ms: number): string {
 
 export function previewFileName(settings: CaptureSettings): string {
   const now = new Date();
-  const dateStr = now.toISOString().slice(0, 10);
+  const dateStr = localDateString(now);
   const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '-');
   const resolution = `${settings.width}x${settings.height}`;
 

@@ -74,7 +74,7 @@ export function Switch({ checked, onChange, label, description, disabled }: Swit
         {description && (
           <span
             id={descriptionId}
-            className="mt-1 block text-[12px] leading-[1.55] text-slate-500 transition-colors group-hover:text-slate-400"
+            className="mt-1 block text-[12px] leading-[1.55] text-slate-400 transition-colors group-hover:text-slate-400"
           >
             {description}
           </span>
@@ -109,10 +109,16 @@ export function Switch({ checked, onChange, label, description, disabled }: Swit
 
 export type ToastKind = 'success' | 'error' | 'info';
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 export interface ToastItem {
   id: number;
   kind: ToastKind;
   message: string;
+  action?: ToastAction;
 }
 
 const TOAST_STYLES: Record<ToastKind, { icon: typeof Info; className: string }> = {
@@ -129,17 +135,14 @@ export function ToastStack({
   onDismiss: (id: number) => void;
 }) {
   return (
-    <div
-      aria-live="polite"
-      aria-atomic="false"
-      className="pointer-events-none fixed bottom-5 right-5 z-[70] flex w-[calc(100vw-2.5rem)] max-w-sm flex-col gap-2"
-    >
+    <div className="pointer-events-none fixed bottom-5 right-5 z-[70] flex w-[calc(100vw-2.5rem)] max-w-sm flex-col gap-2">
       {toasts.map((toast) => {
         const style = TOAST_STYLES[toast.kind];
         const Icon = style.icon;
         return (
           <div
             key={toast.id}
+            role={toast.kind === 'error' ? 'alert' : 'status'}
             className={cn(
               'anim-in pointer-events-auto flex items-start gap-3 rounded-xl border bg-[#0b1019]/95 px-3.5 py-3 text-[14px] font-medium text-slate-200 shadow-2xl shadow-black/50 backdrop-blur-xl',
               style.className
@@ -147,11 +150,23 @@ export function ToastStack({
           >
             <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             <span className="flex-1 leading-relaxed">{toast.message}</span>
+            {toast.action && (
+              <button
+                type="button"
+                onClick={() => {
+                  toast.action?.onClick();
+                  onDismiss(toast.id);
+                }}
+                className="shrink-0 rounded px-1.5 py-0.5 font-semibold text-amber-300 transition-colors hover:bg-amber-400/10 hover:text-amber-200"
+              >
+                {toast.action.label}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => onDismiss(toast.id)}
               aria-label="Fechar notificação"
-              className="rounded p-0.5 text-slate-500 transition-colors hover:text-white"
+              className="rounded p-0.5 text-slate-400 transition-colors hover:text-white"
             >
               <X className="h-3.5 w-3.5" />
             </button>

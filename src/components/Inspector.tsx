@@ -1,6 +1,8 @@
+import { useEffect, useRef } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
+  Clock,
   Copy,
   Download,
   ExternalLink,
@@ -9,6 +11,7 @@ import {
   Link2,
   Maximize2,
   Monitor,
+  Pencil,
   PanelRightClose,
   PanelRightOpen,
   RefreshCw,
@@ -22,6 +25,9 @@ import {
   formatDuration,
   hrefOf,
   hostOf,
+  isCaptured,
+  isFailed,
+  isPending,
   pathOf,
   stepLabel,
   type CapturedItem,
@@ -29,7 +35,8 @@ import {
   type LastRun,
   type RunProgress,
 } from '../lib/snapper';
-import { cn } from './ui';
+import { useFocusTrap } from '../hooks/useFocusTrap';
+import { cn, Spinner } from './ui';
 
 interface InspectorProps {
   items: CapturedItem[];
@@ -46,7 +53,9 @@ interface InspectorProps {
   onCopy: (item: CapturedItem) => void;
   onRemove: (id: string) => void;
   onRetry: (item: CapturedItem) => void;
+  onRename: (item: CapturedItem) => void;
   onCollapse?: () => void;
+  className?: string;
 }
 
 const SCHEME_LABEL: Record<CaptureSettings['colorScheme'], string> = {
@@ -70,20 +79,27 @@ export function Inspector({
   onCopy,
   onRemove,
   onRetry,
+  onRename,
   onCollapse,
+  className,
 }: InspectorProps) {
   const selected = selectedId
     ? items.find((item) => item.id === selectedId) ?? null
     : null;
-  const validItems = items.filter((item) => item.dataUrl && !item.error);
-  const failedItems = items.filter((item) => Boolean(item.error) || !item.dataUrl);
+  const validItems = items.filter(isCaptured);
+  const failedItems = items.filter(isFailed);
   const totalBytes = validItems.reduce((sum, item) => sum + (item.byteSize || 0), 0);
-  const selectedIsError = Boolean(selected && (selected.error || !selected.dataUrl));
+  const selectedIsError = Boolean(selected && isFailed(selected));
+  const selectedIsPending = Boolean(selected && isPending(selected));
 
   return (
     <aside
-      className="flex h-full min-h-0 w-[304px] shrink-0 flex-col border-l border-white/[0.06] bg-[#080b12]"
+      className={cn(
+        'flex h-full min-h-0 w-[304px] shrink-0 flex-col border-l border-white/[0.06] bg-[#080b12]',
+        className
+      )}
       aria-label="Inspetor de capturas"
+      id="inspector-panel"
     >
       <header className="flex h-[54px] shrink-0 items-center gap-2 border-b border-white/[0.06] px-4">
         <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-slate-400">
@@ -95,10 +111,20 @@ export function Inspector({
             <span
               className={cn(
                 'chip',
-                selectedIsError ? 'chip-rose' : 'chip-amber'
+                selectedIsError
+                  ? 'chip-rose'
+                  : selectedIsPending
+                    ? 'chip-blue'
+                    : 'chip-amber'
               )}
             >
-              {selectedIsError ? 'falha' : 'selecionada'}
+              {selectedIsError
+                ? 'falha'
+                : selectedIsPending
+                  ? selected?.status === 'processing'
+                    ? 'capturando'
+                    : 'na fila'
+                  : 'selecionada'}
             </span>
           ) : (
             <span className="chip">lote</span>
@@ -107,7 +133,7 @@ export function Inspector({
             <button
               type="button"
               onClick={onCollapse}
-              className="btn btn-ghost btn-icon h-7 w-7 text-slate-500 hover:text-white"
+              className="btn btn-ghost btn-icon h-7 w-7 text-slate-400 hover:text-white"
               title="Retrair inspetor"
               aria-label="Retrair inspetor"
             >
@@ -126,6 +152,8 @@ export function Inspector({
               onRetry={onRetry}
               onRemove={onRemove}
             />
+          ) : selectedIsPending ? (
+            <PendingDetails item={selected} />
           ) : (
             <CaptureDetails
               item={selected}
@@ -135,6 +163,7 @@ export function Inspector({
               onDownload={onDownload}
               onCopy={onCopy}
               onRemove={onRemove}
+              onRename={onRename}
             />
           )
         ) : (
@@ -167,6 +196,7 @@ function CaptureDetails({
   onDownload,
   onCopy,
   onRemove,
+  onRename,
 }: {
   item: CapturedItem;
   items: CapturedItem[];
@@ -175,8 +205,12 @@ function CaptureDetails({
   onDownload: (item: CapturedItem) => void;
   onCopy: (item: CapturedItem) => void;
   onRemove: (id: string) => void;
+  onRename: (item: CapturedItem) => void;
 }) {
-  const others = items.filter((candidate) => candidate.id !== item.id).slice(-3).reverse();
+  const others = items
+    .filter((candidate) => candidate.id !== item.id && !isPending(candidate))
+    .slice(-3)
+    .reverse();
 
   return (
     <div className="anim-in p-4">
@@ -188,7 +222,7 @@ function CaptureDetails({
       >
         <span className="block aspect-[16/10] w-full">
           <img
-            src={item.previewDataUrl || item.dataUrl}
+            src={item.previewDataUrl}
             alt=""
             className="h-full w-full object-cover object-top transition-transform duration-500 group-hover:scale-[1.03]"
           />
@@ -215,11 +249,11 @@ function CaptureDetails({
           >
             <span className="truncate">
               {hostOf(item.url)}
-              <span className="font-medium text-slate-500">{pathOf(item.url)}</span>
+              <span className="font-medium text-slate-400">{pathOf(item.url)}</span>
             </span>
-            <ExternalLink className="h-3 w-3 shrink-0 text-slate-600 group-hover/link:text-amber-400" />
+            <ExternalLink className="h-3 w-3 shrink-0 text-slate-400 group-hover/link:text-amber-400" />
           </a>
-          <p className="mt-0.5 truncate font-mono text-[11px] text-slate-600" title={item.url}>
+          <p className="mt-0.5 truncate font-mono text-[11px] text-slate-400" title={item.url}>
             {item.url}
           </p>
         </div>
@@ -240,9 +274,18 @@ function CaptureDetails({
 
       <div className="mt-2 flex items-center gap-2 overflow-hidden rounded-lg border border-white/[0.06] bg-black/25 px-2.5 py-2">
         <FileCode className="h-3.5 w-3.5 shrink-0 text-amber-400/70" />
-        <span className="truncate font-mono text-[11px] text-slate-400" title={item.fileName}>
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-slate-400" title={item.fileName}>
           {item.fileName}
         </span>
+        <button
+          type="button"
+          onClick={() => onRename(item)}
+          aria-label="Renomear arquivo antes de baixar"
+          title="Renomear arquivo"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-amber-300"
+        >
+          <Pencil className="h-3 w-3" />
+        </button>
       </div>
 
       <div className="mt-3 space-y-1.5">
@@ -283,7 +326,7 @@ function CaptureDetails({
             href={hrefOf(item.url)}
             target="_blank"
             rel="noreferrer"
-            className="btn btn-ghost btn-sm flex-1 text-slate-500 hover:text-slate-200"
+            className="btn btn-ghost btn-sm flex-1 text-slate-400 hover:text-slate-200"
           >
             <ExternalLink className="h-3.5 w-3.5" />
             Abrir site
@@ -291,7 +334,7 @@ function CaptureDetails({
           <button
             type="button"
             onClick={() => onRemove(item.id)}
-            className="btn btn-ghost btn-sm text-slate-500 hover:text-rose-300"
+            className="btn btn-ghost btn-sm text-slate-400 hover:text-rose-300"
           >
             <Trash2 className="h-3.5 w-3.5" />
             Remover
@@ -301,7 +344,7 @@ function CaptureDetails({
 
       {others.length > 0 && (
         <div className="mt-4 border-t border-white/[0.06] pt-3">
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
             No lote
           </p>
           <div className="space-y-1">
@@ -313,9 +356,9 @@ function CaptureDetails({
                 className="flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
               >
                 <span className="h-6 w-9 shrink-0 overflow-hidden rounded border border-white/[0.08] bg-[#060910]">
-                  {other.previewDataUrl || other.dataUrl ? (
+                  {other.previewDataUrl ? (
                     <img
-                      src={other.previewDataUrl || other.dataUrl}
+                      src={other.previewDataUrl}
                       alt=""
                       className="h-full w-full object-cover object-top"
                     />
@@ -329,11 +372,11 @@ function CaptureDetails({
                   <span className="block truncate text-[12.5px] font-medium text-slate-300">
                     {hostOf(other.url)}
                   </span>
-                  <span className="block truncate font-mono text-[10.5px] text-slate-600">
+                  <span className="block truncate font-mono text-[10.5px] text-slate-400">
                     {other.capturedAt}
                   </span>
                 </span>
-                {other.error || !other.dataUrl ? (
+                {isFailed(other) ? (
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400/80" />
                 ) : (
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400/80" />
@@ -343,6 +386,69 @@ function CaptureDetails({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function PendingDetails({ item }: { item: CapturedItem }) {
+  const isCurrent = item.status === 'processing';
+  return (
+    <div className="anim-in p-4">
+      <div
+        className={cn(
+          'flex items-start gap-2.5 rounded-lg border px-3 py-2.5',
+          isCurrent
+            ? 'border-amber-400/20 bg-amber-400/[0.06]'
+            : 'border-sky-400/20 bg-sky-400/[0.05]'
+        )}
+      >
+        <span
+          className={cn(
+            'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border',
+            isCurrent
+              ? 'border-amber-400/25 bg-amber-400/[0.08] text-amber-300'
+              : 'border-sky-400/20 bg-sky-400/[0.08] text-sky-300'
+          )}
+        >
+          {isCurrent ? <Spinner className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
+        </span>
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold text-white">
+            {isCurrent ? 'Capturando agora' : 'Aguardando na fila'}
+          </p>
+          <p className="mt-0.5 text-[11.5px] leading-relaxed text-slate-400">
+            {isCurrent
+              ? stepLabel(item.step || 'running')
+              : 'Esta URL será processada na sequência, respeitando a ordem do lote.'}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center gap-2 overflow-hidden rounded-lg border border-white/[0.06] bg-black/25 px-2.5 py-2">
+        <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+        <span className="truncate font-mono text-[11px] text-slate-400" title={item.url}>
+          {item.url}
+        </span>
+      </div>
+
+      <dl className="mt-4 grid grid-cols-2 gap-1.5">
+        <Stat label="Posição" value={`#${item.index + 1}`} />
+        <Stat label="Formato" value={item.format.toUpperCase()} />
+        <Stat
+          label="Viewport"
+          value={`${item.dimensions?.pageWidth ?? '—'} × ${item.dimensions?.pageHeight || '—'}`}
+        />
+        <Stat
+          label="Status"
+          value={isCurrent ? 'Capturando' : 'Na fila'}
+          accent={!isCurrent}
+        />
+      </dl>
+
+      <p className="mt-3 rounded-lg border border-white/[0.06] bg-white/[0.015] px-2.5 py-2 text-[11.5px] leading-relaxed text-slate-400">
+        Quando a captura terminar, este painel troca automaticamente para os metadados, a
+        prévia ampliada e as ações de download.
+      </p>
     </div>
   );
 }
@@ -367,9 +473,9 @@ function ErrorDetails({
         <div className="min-w-0 flex-1">
           <p className="truncate text-[14px] font-semibold text-slate-100">
             {hostOf(item.url)}
-            <span className="font-normal text-slate-500">{pathOf(item.url)}</span>
+            <span className="font-normal text-slate-400">{pathOf(item.url)}</span>
           </p>
-          <p className="mt-0.5 font-mono text-[10.5px] text-slate-600">{item.capturedAt}</p>
+          <p className="mt-0.5 font-mono text-[10.5px] text-slate-400">{item.capturedAt}</p>
         </div>
       </div>
 
@@ -378,8 +484,8 @@ function ErrorDetails({
       </p>
 
       <div className="mt-3 flex items-center gap-2 overflow-hidden rounded-lg border border-white/[0.06] bg-black/25 px-2.5 py-2">
-        <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-600" />
-        <span className="truncate font-mono text-[11px] text-slate-500" title={item.url}>
+        <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+        <span className="truncate font-mono text-[11px] text-slate-400" title={item.url}>
           {item.url}
         </span>
       </div>
@@ -396,7 +502,7 @@ function ErrorDetails({
       <button
         type="button"
         onClick={() => onRemove(item.id)}
-        className="btn btn-ghost btn-sm mt-1.5 w-full text-slate-500 hover:text-rose-300"
+        className="btn btn-ghost btn-sm mt-1.5 w-full text-slate-400 hover:text-rose-300"
       >
         <Trash2 className="h-3.5 w-3.5" />
         Remover do lote
@@ -470,7 +576,7 @@ function BatchOverview({
         </span>
         <div className="min-w-0">
           <p className="truncate text-[13px] font-semibold text-white">{state.title}</p>
-          <p className="mt-0.5 truncate text-[11.5px] text-slate-500">{state.subtitle}</p>
+          <p className="mt-0.5 truncate text-[11.5px] text-slate-400">{state.subtitle}</p>
         </div>
       </div>
 
@@ -483,7 +589,7 @@ function BatchOverview({
 
       {isRunning && (
         <div className="mt-2">
-          <div className="mb-1 flex items-center justify-between font-mono text-[10.5px] text-slate-600">
+          <div className="mb-1 flex items-center justify-between font-mono text-[10.5px] text-slate-400">
             <span>{formatClock(elapsedMs)} decorridos</span>
             <span>{progress.finished}/{progress.total}</span>
           </div>
@@ -502,7 +608,7 @@ function BatchOverview({
       )}
 
       <div className="mt-4 border-t border-white/[0.06] pt-3">
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600">
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
           Ajustes ativos
         </p>
         <div className="space-y-1.5">
@@ -523,17 +629,17 @@ function BatchOverview({
 
       <div className="mt-4 border-t border-white/[0.06] pt-3">
         <div className="mb-2 flex items-center justify-between">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
             Atividade
           </p>
           {items.length > 0 && (
-            <span className="font-mono text-[10.5px] text-slate-600">{items.length} itens</span>
+            <span className="font-mono text-[10.5px] text-slate-400">{items.length} itens</span>
           )}
         </div>
 
         {recent.length === 0 ? (
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.015] px-3 py-3">
-            <p className="text-[12px] leading-relaxed text-slate-500">
+            <p className="text-[12px] leading-relaxed text-slate-400">
               As capturas aparecem aqui em tempo real. Selecione um artboard para inspecionar
               metadados e baixar o arquivo.
             </p>
@@ -541,7 +647,8 @@ function BatchOverview({
         ) : (
           <div className="space-y-1">
             {recent.map((item) => {
-              const failed = Boolean(item.error) || !item.dataUrl;
+              const failed = isFailed(item);
+              const pending = isPending(item);
               return (
                 <button
                   key={item.id}
@@ -550,12 +657,16 @@ function BatchOverview({
                   className="flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
                 >
                   <span className="h-6 w-9 shrink-0 overflow-hidden rounded border border-white/[0.08] bg-[#060910]">
-                    {!failed ? (
+                    {!failed && !pending ? (
                       <img
-                        src={item.previewDataUrl || item.dataUrl}
+                        src={item.previewDataUrl}
                         alt=""
                         className="h-full w-full object-cover object-top"
                       />
+                    ) : pending ? (
+                      <span className="flex h-full w-full items-center justify-center text-sky-400/70">
+                        <Clock className="h-2.5 w-2.5" />
+                      </span>
                     ) : (
                       <span className="flex h-full w-full items-center justify-center text-rose-400/60">
                         <AlertTriangle className="h-2.5 w-2.5" />
@@ -566,14 +677,22 @@ function BatchOverview({
                     <span className="block truncate text-[12.5px] font-medium text-slate-300">
                       {hostOf(item.url)}
                     </span>
-                    <span className="block truncate font-mono text-[10.5px] text-slate-600">
-                      {failed ? 'falha' : formatBytes(item.byteSize)} · {item.capturedAt}
+                    <span className="block truncate font-mono text-[10.5px] text-slate-400">
+                      {pending
+                        ? stepLabel(item.step || 'running')
+                        : failed
+                          ? 'falha'
+                          : `${formatBytes(item.byteSize)} · ${item.capturedAt}`}
                     </span>
                   </span>
                   <span
                     className={cn(
                       'h-1.5 w-1.5 shrink-0 rounded-full',
-                      failed ? 'bg-rose-400/80' : 'bg-emerald-400/80'
+                      pending
+                        ? 'bg-sky-400/80'
+                        : failed
+                          ? 'bg-rose-400/80'
+                          : 'bg-emerald-400/80'
                     )}
                   />
                 </button>
@@ -584,9 +703,9 @@ function BatchOverview({
       </div>
 
       <div className="mt-4 flex items-start gap-2 rounded-lg border border-white/[0.05] bg-white/[0.015] px-2.5 py-2">
-        <Monitor className="mt-0.5 h-3 w-3 shrink-0 text-slate-600" />
-        <p className="text-[11px] leading-relaxed text-slate-600">
-          <span className="font-semibold text-slate-500">Ctrl + Enter</span> inicia o lote.
+        <Monitor className="mt-0.5 h-3 w-3 shrink-0 text-slate-400" />
+        <p className="text-[11px] leading-relaxed text-slate-400">
+          <span className="font-semibold text-slate-400">Ctrl + Enter</span> inicia o lote.
           Duplo clique em um artboard abre a prévia ampliada.
         </p>
       </div>
@@ -605,7 +724,7 @@ function SummaryRow({
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="text-[12px] text-slate-500">{label}</span>
+      <span className="text-[12px] text-slate-400">{label}</span>
       <span
         className={cn(
           'truncate text-[12px] font-medium text-slate-300',
@@ -631,7 +750,7 @@ function Stat({
 }) {
   return (
     <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-2">
-      <dt className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-slate-600">
+      <dt className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-slate-400">
         {label}
       </dt>
       <dd
@@ -663,7 +782,7 @@ export function InspectorRail({
   onExpand: () => void;
 }) {
   return (
-    <aside className="hidden w-[56px] shrink-0 border-l border-white/[0.06] bg-[#080b12] 2xl:flex">
+    <aside className="hidden w-[56px] shrink-0 border-l border-white/[0.06] bg-[#080b12] xl:flex">
       <button
         type="button"
         onClick={onExpand}
@@ -671,7 +790,7 @@ export function InspectorRail({
         title="Expandir inspetor"
         aria-label="Expandir inspetor"
       >
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-slate-500 transition-colors group-hover:border-white/[0.16] group-hover:text-white">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-slate-400 transition-colors group-hover:border-white/[0.16] group-hover:text-white">
           <PanelRightOpen className="h-4 w-4" />
         </span>
         <span
@@ -679,13 +798,13 @@ export function InspectorRail({
             'flex h-5 min-w-5 items-center justify-center rounded-full border px-1.5 font-mono text-[10.5px] font-semibold',
             hasSelection
               ? 'border-amber-400/25 bg-amber-400/[0.08] text-amber-300'
-              : 'border-white/[0.08] bg-white/[0.03] text-slate-500'
+              : 'border-white/[0.08] bg-white/[0.03] text-slate-400'
           )}
           title={`${itemCount} ${itemCount === 1 ? 'captura' : 'capturas'}`}
         >
           {itemCount}
         </span>
-        <span className="mt-auto [writing-mode:vertical-rl] rotate-180 text-[9.5px] font-bold uppercase tracking-[0.2em] text-slate-600 transition-colors group-hover:text-slate-300">
+        <span className="mt-auto [writing-mode:vertical-rl] rotate-180 text-[9.5px] font-bold uppercase tracking-[0.2em] text-slate-400 transition-colors group-hover:text-slate-300">
           Inspetor
         </span>
         <span
@@ -701,5 +820,57 @@ export function InspectorRail({
         />
       </button>
     </aside>
+  );
+}
+
+/* ------------------------------- Drawer ---------------------------------- */
+
+/**
+ * Inspetor em drawer para telas menores que 1280 px. Mantém o mesmo conteúdo
+ * do painel persistente, com foco contido e fechamento por Esc/backdrop.
+ */
+export function InspectorDrawer(props: InspectorProps & { onClose: () => void }) {
+  const { onClose, ...inspectorProps } = props;
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useFocusTrap(dialogRef);
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    dialogRef.current
+      ?.querySelector<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+      ?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      previouslyFocused?.focus?.();
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 top-[54px] z-50">
+      <div
+        aria-hidden="true"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/65 backdrop-blur-[2px]"
+      />
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Inspetor de capturas"
+        className="absolute inset-y-0 right-0 flex w-[min(92vw,360px)] flex-col border-l border-white/[0.07] bg-[#080b12] shadow-2xl shadow-black/60"
+      >
+        <Inspector {...inspectorProps} onCollapse={onClose} className="w-full border-l-0" />
+      </div>
+    </div>
   );
 }

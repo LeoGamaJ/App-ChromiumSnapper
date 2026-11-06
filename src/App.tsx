@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import JSZip from 'jszip';
 import { LandingPage } from './components/LandingPage';
 import { ConfigPanel, type TabId } from './components/ConfigPanel';
 import { ConfigRail } from './components/ConfigRail';
@@ -7,15 +6,21 @@ import { PreviewDialog } from './components/PreviewDialog';
 import { ResultsPanel, type GalleryFilter } from './components/ResultsPanel';
 import { ShortcutsDialog } from './components/ShortcutsDialog';
 import { TopBar } from './components/TopBar';
-import { Inspector, InspectorRail } from './components/Inspector';
-import { ToastStack, type ToastItem, type ToastKind } from './components/ui';
+import { Inspector, InspectorDrawer, InspectorRail } from './components/Inspector';
+import { LeaveDialog } from './components/LeaveDialog';
+import { RenameDialog } from './components/RenameDialog';
+import { ToastStack, type ToastAction, type ToastItem, type ToastKind } from './components/ui';
 import { usePersistentState } from './hooks/usePersistentState';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import {
   DEFAULT_SETTINGS,
   DEFAULT_URLS,
   MAX_URLS,
+  dedupeUrls,
   formatClock,
+  isCaptured,
+  isFailed,
+  isPending,
   parseUrls,
   timestampSlug,
   type CaptureSettings,
@@ -120,9 +125,18 @@ export default function App() {
     'snapper.v2.inspectorCollapsed',
     false
   );
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const isDesktop = useMediaQuery('(min-width: 1024px)');
-  const [zipState, setZipState] = useState({ active: false, done: 0, total: 0 });
-  const [clearArmed, setClearArmed] = useState(false);
+  const isWideInspector = useMediaQuery('(min-width: 1280px)');
+  const [zipState, setZipState] = useState({
+    active: false,
+    total: 0,
+    loadedBytes: 0,
+    totalBytes: 0,
+    percent: 0,
+  });
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [leaveOpen, setLeaveOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [view, setView] = useState<'landing' | 'app'>(() => {
     try {
@@ -134,6 +148,7 @@ export default function App() {
 
   const runningRef = useRef(false);
   const zipActiveRef = useRef(false);
+  const zipAbortRef = useRef<AbortController | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const startedAtRef = useRef(0);
   const statsRef = useRef({ total: 0, success: 0, failed: 0 });
@@ -158,15 +173,23 @@ export default function App() {
     setToasts((previous) => previous.filter((toast) => toast.id !== id));
   }, []);
 
-  const pushToast = useCallback((message: string, kind: ToastKind = 'info') => {
-    const id = ++toastIdRef.current;
-    setToasts((previous) => [...previous.slice(-2), { id, kind, message }]);
-    const timer = window.setTimeout(() => {
-      setToasts((previous) => previous.filter((toast) => toast.id !== id));
-      toastTimersRef.current.delete(id);
-    }, 4500);
-    toastTimersRef.current.set(id, timer);
-  }, []);
+  const pushToast = useCallback(
+    (
+      message: string,
+      kind: ToastKind = 'info',
+      action?: ToastAction,
+      durationMs = action ? 10000 : 4500
+    ) => {
+      const id = ++toastIdRef.current;
+      setToasts((previous) => [...previous.slice(-2), { id, kind, message, action }]);
+      const timer = window.setTimeout(() => {
+        setToasts((previous) => previous.filter((toast) => toast.id !== id));
+        toastTimersRef.current.delete(id);
+      }, durationMs);
+      toastTimersRef.current.set(id, timer);
+    },
+    []
+  );
 
   useEffect(() => {
     const timers = toastTimersRef.current;
@@ -184,16 +207,22 @@ export default function App() {
   }, [isRunning]);
 
   useEffect(() => {
-    if (!clearArmed) return;
-    const timer = window.setTimeout(() => setClearArmed(false), 3500);
-    return () => window.clearTimeout(timer);
-  }, [clearArmed]);
-
-  useEffect(() => {
     if (filter !== 'error') return;
-    const hasFailed = items.some((item) => Boolean(item.error) || !item.dataUrl);
+    const hasFailed = items.some(isFailed);
     if (!hasFailed) setFilter('all');
   }, [filter, items]);
+
+  // Evita perder um lote inteiro ao recarregar/fechar a aba. O navegador
+  // mostra seu próprio diálogo; não é possível customizar o texto.
+  useEffect(() => {
+    if (!isRunning && items.length === 0) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isRunning, items.length]);
 
   useEffect(() => {
     if (previewId && !items.some((item) => item.id === previewId)) {
@@ -209,6 +238,14 @@ export default function App() {
   useEffect(() => {
     if (isDesktop) setConfigOpen(false);
   }, [isDesktop]);
+
+  useEffect(() => {
+    if (isWideInspector) setInspectorOpen(false);
+  }, [isWideInspector]);
+
+  useEffect(() => {
+    if (focusMode) setInspectorOpen(false);
+  }, [focusMode]);
 
   useEffect(() => {
     if (items.length === 0) setLastRun(null);
@@ -249,16 +286,37 @@ export default function App() {
       setElapsedMs(0);
       statsRef.current = { total: sanitized.length, success: 0, failed: 0 };
 
+      const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const queuedItems: CapturedItem[] = sanitized.map((url, index) => ({
+        id: `${runId}_${index}`,
+        index,
+        url,
+        fileName: '',
+        format: snapshot.format,
+        status: 'pending',
+        byteSize: 0,
+        dimensions: {
+          pageWidth: snapshot.width,
+          pageHeight: snapshot.fullPage ? 0 : snapshot.height,
+        },
+        durationMs: 0,
+        capturedAt: new Date().toLocaleTimeString('pt-BR'),
+      }));
+
+      // A fila inteira aparece no canvas imediatamente. Cada item evolui de
+      // pending → processing → success/error à medida que o SSE avança.
+      setItems((previous) => {
+        const base = retryOf
+          ? previous.filter((item) => item.id !== retryOf)
+          : previous;
+        return [...base, ...queuedItems];
+      });
+
       const controller = new AbortController();
       abortRef.current = controller;
       let interrupted = false;
       let completed = false;
       let fatalMessage = '';
-
-      const removeRetriedItem = () => {
-        if (!retryOf) return;
-        setItems((previous) => previous.filter((item) => item.id !== retryOf));
-      };
 
       const handleEventBlock = (block: string) => {
         const lines = block.split('\n');
@@ -288,38 +346,67 @@ export default function App() {
             step: 'running',
           }));
         } else if (eventName === 'item_start') {
+          const eventIndex = Number(payload.index) || 0;
+          setItems((previous) =>
+            previous.map((item) =>
+              item.id === `${runId}_${eventIndex}`
+                ? { ...item, status: 'processing', step: 'loading' }
+                : item
+            )
+          );
           setProgress((previous) => ({
             ...previous,
-            finished: Math.min(Number(payload.index) || 0, previous.total),
-            statusText: `[${Number(payload.index) + 1}/${previous.total}] Acessando ${
+            finished: Math.min(eventIndex, previous.total),
+            statusText: `[${eventIndex + 1}/${previous.total}] Acessando ${
               payload.url
             }...`,
             step: 'loading',
           }));
         } else if (eventName === 'item_step') {
+          const eventIndex = Number(payload.index) || 0;
+          setItems((previous) =>
+            previous.map((item) =>
+              item.id === `${runId}_${eventIndex}`
+                ? {
+                    ...item,
+                    status: 'processing',
+                    step: payload.step || item.step,
+                  }
+                : item
+            )
+          );
           setProgress((previous) => ({
             ...previous,
-            statusText: `[${Number(payload.index) + 1}/${previous.total}] ${payload.status}`,
+            statusText: `[${eventIndex + 1}/${previous.total}] ${payload.status}`,
             step: payload.step || previous.step,
           }));
         } else if (eventName === 'item_success') {
-          removeRetriedItem();
+          const eventIndex = Number(payload.index) || 0;
           const newItem: CapturedItem = {
-            id: `${Date.now()}_${payload.index}_${Math.random().toString(36).slice(2, 7)}`,
-            index: Number(payload.index) || 0,
+            id: `${runId}_${eventIndex}`,
+            index: eventIndex,
+            status: 'success',
             url: payload.url,
             fileName: payload.fileName,
             format: payload.format,
             byteSize: payload.byteSize,
             dimensions: payload.dimensions,
             durationMs: payload.durationMs,
-            dataUrl: payload.dataUrl,
-            previewDataUrl: payload.previewDataUrl || payload.dataUrl,
+            previewDataUrl: payload.previewDataUrl || '',
+            fileUrl: payload.fileUrl,
+            batchId: payload.batchId,
+            itemId: payload.itemId,
             capturedAt: new Date().toLocaleTimeString('pt-BR'),
             imgStats: payload.imgStats,
           };
           statsRef.current.success += 1;
-          setItems((previous) => [...previous, newItem]);
+          setItems((previous) => {
+            const existingIndex = previous.findIndex((item) => item.id === newItem.id);
+            if (existingIndex < 0) return [...previous, newItem];
+            const next = [...previous];
+            next[existingIndex] = newItem;
+            return next;
+          });
           setSelectedId(newItem.id);
           setProgress((previous) => ({
             ...previous,
@@ -328,22 +415,24 @@ export default function App() {
             step: 'item_done',
           }));
         } else if (eventName === 'item_error') {
-          removeRetriedItem();
+          const eventIndex = Number(payload.index) || 0;
           const errorItem: CapturedItem = {
-            id: `${Date.now()}_err_${payload.index}_${Math.random().toString(36).slice(2, 7)}`,
-            index: Number(payload.index) || 0,
+            id: `${runId}_${eventIndex}`,
+            index: eventIndex,
             url: payload.url,
             fileName: payload.fileName,
             format: snapshot.format,
+            status: 'error',
             byteSize: 0,
             dimensions: { pageWidth: snapshot.width, pageHeight: 0 },
             durationMs: payload.durationMs || 0,
-            dataUrl: '',
             error: payload.error || 'Falha ao renderizar a página.',
             capturedAt: new Date().toLocaleTimeString('pt-BR'),
           };
           statsRef.current.failed += 1;
-          setItems((previous) => [...previous, errorItem]);
+          setItems((previous) =>
+            previous.map((item) => (item.id === errorItem.id ? errorItem : item))
+          );
           setProgress((previous) => ({
             ...previous,
             finished: Number(payload.index) + 1,
@@ -452,6 +541,26 @@ export default function App() {
           pushToast(fatalMessage, 'error');
         }
 
+        // Se o lote foi interrompido ou a conexão caiu, os itens que ficaram
+        // na fila precisam sair do estado "pending" para não parecerem presos.
+        const remaining = Math.max(0, sanitized.length - (stats.success + stats.failed));
+        if (remaining > 0) {
+          stats.failed += remaining;
+          setItems((previous) =>
+            previous.map((item) =>
+              item.id.startsWith(`${runId}_`) && isPending(item)
+                ? {
+                    ...item,
+                    status: 'error',
+                    error: interrupted
+                      ? 'Captura interrompida antes de concluir.'
+                      : fatalMessage || 'Captura não concluída por falha de conexão.',
+                  }
+                : item
+            )
+          );
+        }
+
         if (stats.success + stats.failed > 0 || interrupted) {
           setLastRun({
             total: stats.total,
@@ -505,14 +614,25 @@ export default function App() {
     [runCapture]
   );
 
+  const toggleInspector = useCallback(() => {
+    if (focusMode) return;
+    if (isWideInspector) {
+      setInspectorCollapsed((previous) => !previous);
+      return;
+    }
+    setConfigOpen(false);
+    setInspectorOpen((previous) => !previous);
+  }, [focusMode, isWideInspector, setInspectorCollapsed]);
+
   /* --------------------------------- Actions -------------------------------- */
 
   const handleDownloadSingle = useCallback(
     (item: CapturedItem) => {
-      if (!item.dataUrl) return;
+      if (!item.fileUrl) return;
+      const params = new URLSearchParams({ download: '1', name: item.fileName });
       const anchor = document.createElement('a');
-      anchor.href = item.dataUrl;
-      anchor.download = item.fileName || `capture.${item.format}`;
+      anchor.href = `${item.fileUrl}?${params.toString()}`;
+      anchor.download = item.fileName;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -521,10 +641,14 @@ export default function App() {
     [pushToast]
   );
 
-  const handlePreview = useCallback((item: CapturedItem) => {
-    setSelectedId(item.id);
-    setPreviewId(item.id);
-  }, []);
+  const handlePreview = useCallback(
+    (item: CapturedItem) => {
+      if (!isWideInspector) setInspectorOpen(false);
+      setSelectedId(item.id);
+      setPreviewId(item.id);
+    },
+    [isWideInspector]
+  );
 
   const handleSelect = useCallback((item: CapturedItem) => {
     setSelectedId(item.id);
@@ -532,71 +656,170 @@ export default function App() {
 
   const handleCopyImage = useCallback(
     async (item: CapturedItem) => {
-      if (!item.dataUrl || item.format === 'pdf') return;
+      if (!item.fileUrl || item.format === 'pdf') return;
       try {
         if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
           throw new Error('Clipboard API indisponível');
         }
-        const sourceBlob = await (await fetch(item.dataUrl)).blob();
+        const sourceBlob = await (await fetch(item.fileUrl)).blob();
         const pngBlob =
           sourceBlob.type === 'image/png' ? sourceBlob : await blobToPng(sourceBlob);
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
         pushToast('Imagem copiada para a área de transferência.', 'success');
       } catch {
-        pushToast('O navegador bloqueou a cópia. Use o download do arquivo.', 'error');
+        pushToast('Não foi possível copiar a imagem. Baixe o arquivo ou tente novamente.', 'error');
       }
     },
     [pushToast]
   );
 
-  const handleZip = useCallback(async () => {
-    const validItems = items.filter((item) => item.dataUrl && !item.error);
-    if (validItems.length === 0 || zipActiveRef.current) return;
+  const createZip = useCallback(async (): Promise<boolean> => {
+    const validItems = items.filter(isCaptured);
+    if (validItems.length === 0 || zipActiveRef.current) return false;
 
+    const controller = new AbortController();
     zipActiveRef.current = true;
-    setZipState({ active: true, done: 0, total: validItems.length });
+    zipAbortRef.current = controller;
+    setZipState({
+      active: true,
+      total: validItems.length,
+      loadedBytes: 0,
+      totalBytes: 0,
+      percent: 0,
+    });
 
     try {
-      const zip = new JSZip();
-      validItems.forEach((item, index) => {
-        const base64 = item.dataUrl.split(',')[1];
-        if (!base64) return;
-        zip.file(item.fileName || `capture-${index + 1}.${item.format}`, base64, {
-          base64: true,
-        });
+      const response = await fetch('/api/captures/pack-zip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          files: validItems.map((item) => ({
+            batchId: item.batchId,
+            itemId: item.itemId,
+            fileName: item.fileName,
+          })),
+        }),
       });
 
-      const blob = await zip.generateAsync(
-        {
-          type: 'blob',
-          compression: 'DEFLATE',
-          compressionOptions: { level: 6 },
-        },
-        (metadata) => {
-          const done = Math.min(
-            validItems.length,
-            Math.max(0, Math.round((metadata.percent / 100) * validItems.length))
-          );
-          setZipState((previous) => ({ ...previous, done }));
+      if (!response.ok) {
+        let detail = 'Não foi possível gerar o arquivo ZIP.';
+        try {
+          const body = await response.json();
+          if (body?.error) detail = body.error;
+        } catch {
+          // Mantém a mensagem genérica quando o corpo não é JSON.
         }
-      );
+        throw new Error(detail);
+      }
+
+      const totalBytes = Number(response.headers.get('content-length')) || 0;
+      setZipState((previous) => ({ ...previous, totalBytes }));
+
+      // Lê o ZIP em chunks: a UI continua responsiva e o progresso reflete os
+      // bytes realmente recebidos, em vez de uma contagem estimada de arquivos.
+      let blob: Blob;
+      if (response.body) {
+        const reader = response.body.getReader();
+        const chunks: BlobPart[] = [];
+        let loadedBytes = 0;
+        let lastPaint = 0;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value) continue;
+          chunks.push(value);
+          loadedBytes += value.byteLength;
+
+          const now = performance.now();
+          if (now - lastPaint > 80) {
+            lastPaint = now;
+            setZipState((previous) => ({
+              ...previous,
+              loadedBytes,
+              percent: totalBytes
+                ? Math.min(99, Math.round((loadedBytes / totalBytes) * 100))
+                : 0,
+            }));
+          }
+        }
+
+        blob = new Blob(chunks, { type: 'application/zip' });
+        setZipState((previous) => ({
+          ...previous,
+          loadedBytes,
+          percent: 100,
+        }));
+      } else {
+        blob = await response.blob();
+        setZipState((previous) => ({ ...previous, percent: 100 }));
+      }
 
       downloadBlob(blob, `chromium-snapper_${timestampSlug()}.zip`);
+      const added = Number(response.headers.get('X-Capture-Count'));
+      const count = Number.isFinite(added) && added > 0 ? added : validItems.length;
       pushToast(
-        `ZIP com ${validItems.length} ${validItems.length === 1 ? 'arquivo' : 'arquivos'} gerado.`,
+        `ZIP com ${count} ${count === 1 ? 'arquivo' : 'arquivos'} gerado.`,
         'success'
       );
-    } catch {
-      pushToast('Não foi possível gerar o arquivo ZIP.', 'error');
+      return true;
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') {
+        pushToast('Geração do ZIP cancelada.', 'info');
+        return false;
+      }
+      pushToast(
+        (error as Error).message || 'Não foi possível gerar o arquivo ZIP.',
+        'error'
+      );
+      return false;
     } finally {
       zipActiveRef.current = false;
-      setZipState({ active: false, done: 0, total: 0 });
+      zipAbortRef.current = null;
+      setZipState({
+        active: false,
+        total: 0,
+        loadedBytes: 0,
+        totalBytes: 0,
+        percent: 0,
+      });
     }
   }, [items, pushToast]);
 
-  const handleRemove = useCallback((id: string) => {
-    setItems((previous) => previous.filter((item) => item.id !== id));
+  const handleZipCancel = useCallback(() => {
+    zipAbortRef.current?.abort();
   }, []);
+
+  const handleZip = useCallback(() => {
+    void createZip();
+  }, [createZip]);
+
+  const handleRemove = useCallback(
+    (id: string) => {
+      const index = items.findIndex((item) => item.id === id);
+      if (index < 0) return;
+      const removed = items[index];
+      setItems((previous) => previous.filter((item) => item.id !== id));
+      pushToast(
+        'Captura removida do canvas.',
+        'info',
+        {
+          label: 'Desfazer',
+          onClick: () => {
+            setItems((previous) => {
+              if (previous.some((item) => item.id === removed.id)) return previous;
+              const next = [...previous];
+              next.splice(Math.min(index, next.length), 0, removed);
+              return next;
+            });
+          },
+        },
+        10000
+      );
+    },
+    [items, pushToast]
+  );
 
   const enterWorkspace = useCallback(() => {
     try {
@@ -615,28 +838,116 @@ export default function App() {
     window.scrollTo(0, 0);
   }, []);
 
-  const handleClear = useCallback(() => {
-    if (!clearArmed) {
-      setClearArmed(true);
+  const requestLeave = useCallback(() => {
+    if (isRunning) return;
+    setInspectorOpen(false);
+    setConfigOpen(false);
+    if (items.length > 0) {
+      setLeaveOpen(true);
       return;
     }
+    goToLanding();
+  }, [goToLanding, isRunning, items.length]);
+
+  const handleLeaveWithZip = useCallback(async () => {
+    const ok = await createZip();
+    if (!ok) return;
+    setLeaveOpen(false);
+    goToLanding();
+  }, [createZip, goToLanding]);
+
+  const handleLeaveWithoutDownload = useCallback(() => {
+    setLeaveOpen(false);
+    goToLanding();
+  }, [goToLanding]);
+
+  const handleClear = useCallback(() => {
+    if (items.length === 0) return;
+    const snapshot = { items, lastRun, filter, selectedId };
     setItems([]);
     setLastRun(null);
     setPreviewId(null);
     setFilter('all');
-    setClearArmed(false);
-    pushToast('Galeria limpa.', 'info');
-  }, [clearArmed, pushToast]);
+    pushToast(
+      'Galeria limpa.',
+      'info',
+      {
+        label: 'Desfazer',
+        onClick: () => {
+          setItems(snapshot.items);
+          setLastRun(snapshot.lastRun);
+          setFilter(snapshot.filter);
+          setSelectedId(snapshot.selectedId);
+        },
+      },
+      10000
+    );
+  }, [filter, items, lastRun, pushToast, selectedId]);
+
+  const handleClearUrls = useCallback(() => {
+    if (!rawUrls.trim()) return;
+    const snapshot = rawUrls;
+    setRawUrls('');
+    pushToast(
+      'Lista de URLs limpa.',
+      'info',
+      {
+        label: 'Desfazer',
+        onClick: () => {
+          setRawUrls((current) => (current.trim() ? current : snapshot));
+        },
+      },
+      10000
+    );
+  }, [pushToast, rawUrls, setRawUrls]);
+
+  const handleRename = useCallback(
+    (item: CapturedItem) => {
+      if (!isWideInspector) setInspectorOpen(false);
+      setRenameId(item.id);
+    },
+    [isWideInspector]
+  );
+
+  const handleShowShortcuts = useCallback(() => {
+    if (!isWideInspector) setInspectorOpen(false);
+    setConfigOpen(false);
+    setShortcutsOpen(true);
+  }, [isWideInspector]);
+
+  const handleRenameSave = useCallback(
+    (fileName: string) => {
+      if (!renameId) return;
+      setItems((previous) =>
+        previous.map((item) => (item.id === renameId ? { ...item, fileName } : item))
+      );
+      setRenameId(null);
+      pushToast(`Arquivo renomeado para ${fileName}.`, 'success');
+    },
+    [pushToast, renameId]
+  );
 
   const handleResetSettings = useCallback(() => {
     setStoredSettings({ ...DEFAULT_SETTINGS });
     pushToast('Configurações restauradas para o padrão.', 'info');
   }, [pushToast, setStoredSettings]);
 
-  const handleTrySample = useCallback(() => {
-    setRawUrls(DEFAULT_URLS);
-    void runCapture(parseUrls(DEFAULT_URLS));
-  }, [runCapture, setRawUrls]);
+  const handleAddExamples = useCallback(() => {
+    const current = parseUrls(rawUrls);
+    const examples = parseUrls(DEFAULT_URLS);
+    const merged = dedupeUrls([...current, ...examples]);
+    if (merged.length === current.length) {
+      pushToast('Os links de exemplo já estão na lista.', 'info');
+      return;
+    }
+    setRawUrls(merged.join('\n'));
+    pushToast(
+      `${merged.length - current.length} ${
+        merged.length - current.length === 1 ? 'link de exemplo adicionado' : 'links de exemplo adicionados'
+      }. Revise e inicie a captura quando quiser.`,
+      'success'
+    );
+  }, [pushToast, rawUrls, setRawUrls]);
 
   /* ------------------------------- Shortcuts -------------------------------- */
 
@@ -672,12 +983,12 @@ export default function App() {
 
   /* --------------------------------- Render --------------------------------- */
 
-  const previewableItems = useMemo(
-    () => items.filter((item) => item.dataUrl && !item.error),
-    [items]
-  );
+  const previewableItems = useMemo(() => items.filter(isCaptured), [items]);
   const previewItem = previewId
     ? previewableItems.find((item) => item.id === previewId) ?? null
+    : null;
+  const renameItem = renameId
+    ? items.find((item) => item.id === renameId) ?? null
     : null;
 
   if (view === 'landing') {
@@ -697,15 +1008,18 @@ export default function App() {
         isRunning={isRunning}
         isFocusMode={focusMode}
         isConfigCollapsed={configCollapsed}
-        isInspectorCollapsed={inspectorCollapsed}
+        isInspectorOpen={isWideInspector ? !inspectorCollapsed : inspectorOpen}
         onToggleConfigCollapsed={() => setConfigCollapsed((previous) => !previous)}
-        onToggleInspectorCollapsed={() => setInspectorCollapsed((previous) => !previous)}
+        onToggleInspector={toggleInspector}
         onCapture={handleRun}
         onStop={handleStop}
-        onShowShortcuts={() => setShortcutsOpen(true)}
+        onShowShortcuts={handleShowShortcuts}
         onToggleFocus={() => setFocusMode((previous) => !previous)}
-        onToggleConfig={() => setConfigOpen((previous) => !previous)}
-        onNavigateHome={goToLanding}
+        onToggleConfig={() => {
+          setInspectorOpen(false);
+          setConfigOpen((previous) => !previous);
+        }}
+        onNavigateHome={requestLeave}
       />
 
       <div className="relative flex min-h-0 flex-1">
@@ -726,6 +1040,7 @@ export default function App() {
                 onChange={updateSettings}
                 rawUrls={rawUrls}
                 onRawUrlsChange={setRawUrls}
+                onClearUrls={handleClearUrls}
                 urls={urls}
                 isRunning={isRunning}
                 tab={configTab}
@@ -761,6 +1076,7 @@ export default function App() {
                 onChange={updateSettings}
                 rawUrls={rawUrls}
                 onRawUrlsChange={setRawUrls}
+                onClearUrls={handleClearUrls}
                 urls={urls}
                 isRunning={isRunning}
                 tab={configTab}
@@ -794,15 +1110,17 @@ export default function App() {
             onRemove={handleRemove}
             onRetry={handleRetry}
             onZip={handleZip}
+            onZipCancel={handleZipCancel}
             onClear={handleClear}
-            onTrySample={handleTrySample}
-            onShowShortcuts={() => setShortcutsOpen(true)}
+            onRename={handleRename}
+            onAddExamples={handleAddExamples}
+            onShowShortcuts={handleShowShortcuts}
             zipState={zipState}
-            clearArmed={clearArmed}
           />
         </main>
 
-        {!focusMode &&
+        {isWideInspector &&
+          !focusMode &&
           (inspectorCollapsed ? (
             <InspectorRail
               itemCount={items.length}
@@ -811,7 +1129,7 @@ export default function App() {
               onExpand={() => setInspectorCollapsed(false)}
             />
           ) : (
-            <div className="hidden h-full min-h-0 2xl:flex">
+            <div className="flex h-full min-h-0">
               <Inspector
                 items={items}
                 selectedId={selectedId}
@@ -827,11 +1145,33 @@ export default function App() {
                 onCopy={handleCopyImage}
                 onRemove={handleRemove}
                 onRetry={handleRetry}
+                onRename={handleRename}
                 onCollapse={() => setInspectorCollapsed(true)}
               />
             </div>
           ))}
       </div>
+
+      {!isWideInspector && !focusMode && inspectorOpen && (
+        <InspectorDrawer
+          items={items}
+          selectedId={selectedId}
+          isRunning={isRunning}
+          progress={progress}
+          elapsedMs={elapsedMs}
+          lastRun={lastRun}
+          settings={settings}
+          urlCount={urls.length}
+          onSelect={handleSelect}
+          onPreview={handlePreview}
+          onDownload={handleDownloadSingle}
+          onCopy={handleCopyImage}
+          onRemove={handleRemove}
+          onRetry={handleRetry}
+          onRename={handleRename}
+          onClose={() => setInspectorOpen(false)}
+        />
+      )}
 
       {previewItem && (
         <PreviewDialog
@@ -844,6 +1184,24 @@ export default function App() {
           }}
           onDownload={handleDownloadSingle}
           onCopy={handleCopyImage}
+        />
+      )}
+
+      {renameItem && (
+        <RenameDialog
+          item={renameItem}
+          onClose={() => setRenameId(null)}
+          onSave={handleRenameSave}
+        />
+      )}
+
+      {leaveOpen && (
+        <LeaveDialog
+          captureCount={items.length}
+          isZipping={zipState.active}
+          onCancel={() => setLeaveOpen(false)}
+          onDownloadAndLeave={handleLeaveWithZip}
+          onLeaveWithoutDownload={handleLeaveWithoutDownload}
         />
       )}
 

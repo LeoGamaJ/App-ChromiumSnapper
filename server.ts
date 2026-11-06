@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import puppeteer, { Browser } from 'puppeteer';
 import JSZip from 'jszip';
+import { randomUUID } from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -17,6 +18,126 @@ const MAX_VIEWPORT_WIDTH = 7680;
 const MAX_VIEWPORT_HEIGHT = 4320;
 const ALLOWED_FORMATS = new Set(['png', 'webp', 'jpg', 'pdf']);
 const ALLOWED_COLOR_SCHEMES = new Set(['no-preference', 'light', 'dark']);
+
+// Capturas ficam em memória apenas pelo tempo necessário para prévia,
+// download individual e ZIP. O navegador nunca recebe o arquivo inteiro
+// dentro do evento SSE — somente uma thumbnail leve.
+interface CapturedFile {
+  buffer: Buffer;
+  mimeType: string;
+  fileName: string;
+}
+
+interface CaptureBatch {
+  files: Map<string, CapturedFile>;
+  createdAt: number;
+  touchedAt: number;
+}
+
+const CAPTURE_TTL_MS = 30 * 60 * 1000;
+const MAX_CAPTURE_STORE_BYTES = 2 * 1024 * 1024 * 1024;
+const captureBatches = new Map<string, CaptureBatch>();
+let captureStoreBytes = 0;
+
+function pruneCaptureBatches(now = Date.now()): void {
+  for (const [batchId, batch] of captureBatches) {
+    if (now - batch.touchedAt < CAPTURE_TTL_MS) continue;
+    for (const file of batch.files.values()) captureStoreBytes -= file.buffer.length;
+    captureBatches.delete(batchId);
+  }
+}
+
+function evictOldestBatches(): void {
+  while (captureStoreBytes > MAX_CAPTURE_STORE_BYTES && captureBatches.size > 1) {
+    const oldest = [...captureBatches.entries()].sort(
+      (a, b) => a[1].touchedAt - b[1].touchedAt
+    )[0];
+    if (!oldest) break;
+    for (const file of oldest[1].files.values()) captureStoreBytes -= file.buffer.length;
+    captureBatches.delete(oldest[0]);
+  }
+}
+
+function getCaptureBatch(batchId: string): CaptureBatch | undefined {
+  pruneCaptureBatches();
+  const batch = captureBatches.get(batchId);
+  if (batch) batch.touchedAt = Date.now();
+  return batch;
+}
+
+function getCaptureFile(batchId: unknown, itemId: unknown): CapturedFile | undefined {
+  if (typeof batchId !== 'string' || typeof itemId !== 'string') return undefined;
+  return getCaptureBatch(batchId)?.files.get(itemId);
+}
+
+function storeCaptureFile(
+  batchId: string,
+  itemId: string,
+  file: CapturedFile
+): void {
+  pruneCaptureBatches();
+  let batch = captureBatches.get(batchId);
+  if (!batch) {
+    batch = { files: new Map(), createdAt: Date.now(), touchedAt: Date.now() };
+    captureBatches.set(batchId, batch);
+  }
+  const previous = batch.files.get(itemId);
+  if (previous) captureStoreBytes -= previous.buffer.length;
+  batch.files.set(itemId, file);
+  batch.touchedAt = Date.now();
+  captureStoreBytes += file.buffer.length;
+  evictOldestBatches();
+}
+
+setInterval(() => pruneCaptureBatches(), 5 * 60 * 1000).unref();
+
+function mimeTypeForFormat(format: string): string {
+  if (format === 'pdf') return 'application/pdf';
+  if (format === 'jpg') return 'image/jpeg';
+  if (format === 'png') return 'image/png';
+  return 'image/webp';
+}
+
+function localDateString(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function sanitizeDownloadName(raw: unknown, fallback: string): string {
+  if (typeof raw !== 'string' || !raw.trim()) return fallback;
+  const base = path
+    .basename(raw.replace(/\\/g, '/').normalize('NFKD').replace(/[\u0300-\u036f]/g, ''))
+    .replace(/[^\w.\- ]+/g, '_')
+    .replace(/\s+/g, '-')
+    .replace(/^[._-]+/, '');
+  return base.slice(0, 120) || fallback;
+}
+
+function contentDisposition(kind: 'inline' | 'attachment', fileName: string): string {
+  const asciiName = fileName.replace(/["\\\r\n]/g, '_');
+  return `${kind}; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+}
+
+function uniqueZipEntryName(name: string, used: Set<string>): string {
+  if (!used.has(name)) {
+    used.add(name);
+    return name;
+  }
+  const dot = name.lastIndexOf('.');
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  const extension = dot > 0 ? name.slice(dot) : '';
+  let index = 2;
+  let candidate = `${base}-${index}${extension}`;
+  while (used.has(candidate)) {
+    index += 1;
+    candidate = `${base}-${index}${extension}`;
+  }
+  used.add(candidate);
+  return candidate;
+}
+
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '100mb' }));
@@ -114,7 +235,7 @@ function formatCustomFileName(params: {
     .toLowerCase();
 
   const now = new Date();
-  const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
+  const dateStr = localDateString(now); // YYYY-MM-DD no fuso local
   const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '-'); // HH-MM-SS
   const orderStr = String(index + 1).padStart(2, '0');
   const resStr = `${width}x${height}`;
@@ -841,6 +962,34 @@ async function dismissConsentOverlays(page: any) {
   } catch {}
 }
 
+// Thumbnail leve (viewport) para o canvas. O arquivo final fica no store e é
+// servido sob demanda, evitando payloads SSE gigantes e base64 duplicado.
+async function captureViewportPreview(
+  page: any,
+  width: number,
+  height: number
+): Promise<string> {
+  try {
+    // Mesmo layout CSS, porém rasterizado em ~640 px de largura. Isso reduz
+    // drasticamente a memória de decodificação dos cards (4K vira ~640 px).
+    const scale = Math.max(0.1, Math.min(1, 640 / Math.max(1, width)));
+    await page.setViewport({
+      width: Number(width) || 1920,
+      height: Number(height) || 1080,
+      deviceScaleFactor: scale,
+    });
+    const previewShot = (await page.screenshot({
+      fullPage: false,
+      type: 'webp',
+      quality: 65,
+      encoding: 'base64',
+    })) as string;
+    return previewShot ? `data:image/webp;base64,${previewShot}` : '';
+  } catch {
+    return '';
+  }
+}
+
 // Health endpoint
 app.get('/api/health', (_req, res) => {
   res.json({
@@ -852,6 +1001,90 @@ app.get('/api/health', (_req, res) => {
     formats: Array.from(ALLOWED_FORMATS),
     time: new Date().toISOString(),
   });
+});
+
+// Serve uma captura individual sob demanda. O canvas usa apenas a thumbnail
+// embutida no SSE; o arquivo completo só é baixado aqui.
+app.get('/api/captures/:batchId/:itemId', (req: Request, res: Response) => {
+  const file = getCaptureFile(req.params.batchId, req.params.itemId);
+  if (!file) {
+    return res.status(404).json({
+      error: 'Captura não encontrada ou expirada. Execute o lote novamente.',
+    });
+  }
+
+  const wantsDownload = req.query.download === '1';
+  const requestedName =
+    typeof req.query.name === 'string'
+      ? sanitizeDownloadName(req.query.name, file.fileName)
+      : file.fileName;
+
+  res.setHeader('Content-Type', file.mimeType);
+  res.setHeader('Content-Length', String(file.buffer.length));
+  res.setHeader(
+    'Content-Disposition',
+    contentDisposition(wantsDownload ? 'attachment' : 'inline', requestedName)
+  );
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+  res.end(file.buffer);
+});
+
+// Gera o ZIP no servidor a partir dos buffers já capturados, sem reenviar
+// base64 gigante pelo navegador.
+app.post('/api/captures/pack-zip', async (req: Request, res: Response) => {
+  const { files } = req.body ?? {};
+  if (!Array.isArray(files) || files.length === 0) {
+    return res.status(400).json({ error: 'Nenhuma captura para empacotar.' });
+  }
+
+  try {
+    pruneCaptureBatches();
+    const zip = new JSZip();
+    const usedNames = new Set<string>();
+    let added = 0;
+
+    for (const [index, requested] of files.slice(0, 100).entries()) {
+      const file = getCaptureFile(requested?.batchId, requested?.itemId);
+      if (!file) continue;
+
+      const extension = path.extname(file.fileName) || '.webp';
+      const fallbackName = `capture_${String(index + 1).padStart(2, '0')}${extension}`;
+      const customName =
+        typeof requested?.fileName === 'string' && requested.fileName.trim()
+          ? sanitizeDownloadName(requested.fileName, file.fileName)
+          : file.fileName;
+      const entryName = uniqueZipEntryName(
+        safeZipEntryName(customName, fallbackName),
+        usedNames
+      );
+
+      zip.file(entryName, file.buffer);
+      added += 1;
+    }
+
+    if (added === 0) {
+      return res.status(404).json({
+        error: 'As capturas expiraram no servidor. Execute o lote novamente.',
+      });
+    }
+
+    const zipBuffer = await zip.generateAsync({
+      type: 'nodebuffer',
+      compression: 'STORE',
+    });
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=screenshots_bundle_${Date.now()}.zip`
+    );
+    res.setHeader('X-Capture-Count', String(added));
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(zipBuffer);
+  } catch (err: any) {
+    console.error('Erro ao empacotar zip:', err);
+    res.status(500).json({ error: 'Falha ao gerar arquivo ZIP' });
+  }
 });
 
 // SSE Streaming Batch Endpoint for Interactive UI
@@ -911,6 +1144,8 @@ app.post('/api/screenshot/stream', async (req: Request, res: Response) => {
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders?.();
 
+  const batchId = randomUUID();
+
   let clientDisconnected = false;
   res.on('close', () => {
     if (!res.writableEnded) clientDisconnected = true;
@@ -930,6 +1165,7 @@ app.post('/api/screenshot/stream', async (req: Request, res: Response) => {
     format,
     viewport: { width, height },
     fullPage,
+    batchId,
   });
 
   let browser: Browser | null = null;
@@ -1102,9 +1338,8 @@ app.post('/api/screenshot/stream', async (req: Request, res: Response) => {
           status: `Renderizando captura ${format.toUpperCase()} de alta resolução...`,
         });
 
-        let dataUrl = '';
-        let previewDataUrl = '';
-        let byteSize = 0;
+        let fileBuffer: Buffer;
+        const mimeType = mimeTypeForFormat(format);
 
         if (format === 'pdf') {
           // Generate Continuous Vector PDF
@@ -1115,17 +1350,7 @@ app.post('/api/screenshot/stream', async (req: Request, res: Response) => {
             margin: { top: '0px', right: '0px', bottom: '0px', left: '0px' },
             pageRanges: '1',
           });
-
-          byteSize = pdfBuffer.length;
-          dataUrl = `data:application/pdf;base64,${pdfBuffer.toString('base64')}`;
-
-          // Also generate a WebP thumbnail for interactive gallery preview
-          const previewShot = (await page.screenshot({
-            fullPage: false,
-            type: 'webp',
-            encoding: 'base64',
-          })) as string;
-          previewDataUrl = `data:image/webp;base64,${previewShot}`;
+          fileBuffer = Buffer.from(pdfBuffer);
         } else {
           // Image Capture (WebP, PNG, JPG)
           const puppeteerFormat: 'png' | 'jpeg' | 'webp' =
@@ -1134,48 +1359,58 @@ app.post('/api/screenshot/stream', async (req: Request, res: Response) => {
           const screenshotOptions: any = {
             fullPage: Boolean(fullPage),
             type: puppeteerFormat,
-            encoding: 'base64',
           };
 
           if (puppeteerFormat !== 'png') {
             screenshotOptions.quality = Math.max(10, Math.min(100, Number(quality) || 85));
           }
 
-          let base64Data = (await page.screenshot(screenshotOptions)) as string;
+          fileBuffer = Buffer.from((await page.screenshot(screenshotOptions)) as Uint8Array);
 
           // Fallback protection if fullPage exceeded texture limit
-          if (!base64Data || base64Data.length === 0) {
+          if (!fileBuffer || fileBuffer.length === 0) {
             console.warn(`Aviso: captura fullPage retornou 0 bytes para ${url}, tentando fallback...`);
-            base64Data = (await page.screenshot({
-              fullPage: false,
-              type: puppeteerFormat,
-              encoding: 'base64',
-              quality: puppeteerFormat !== 'png' ? Math.max(10, Math.min(100, Number(quality) || 85)) : undefined,
-            })) as string;
+            fileBuffer = Buffer.from(
+              (await page.screenshot({
+                fullPage: false,
+                type: puppeteerFormat,
+                quality:
+                  puppeteerFormat !== 'png'
+                    ? Math.max(10, Math.min(100, Number(quality) || 85))
+                    : undefined,
+              })) as Uint8Array
+            );
           }
 
-          if (!base64Data || base64Data.length === 0) {
+          if (!fileBuffer || fileBuffer.length === 0) {
             throw new Error('Chromium não conseguiu renderizar a imagem da página (tamanho 0 B).');
           }
-
-          const mimeType = puppeteerFormat === 'jpeg' ? 'image/jpeg' : `image/${puppeteerFormat}`;
-          dataUrl = `data:${mimeType};base64,${base64Data}`;
-          previewDataUrl = dataUrl;
-          byteSize = Math.round((base64Data.length * 3) / 4);
         }
+
+        // Apenas a thumbnail (viewport) viaja no SSE. O arquivo completo fica
+        // no store do servidor e é buscado somente quando necessário.
+        const previewDataUrl = await captureViewportPreview(page, Number(width), Number(height));
+        const itemId = String(i);
+        storeCaptureFile(batchId, itemId, {
+          buffer: fileBuffer,
+          mimeType,
+          fileName,
+        });
 
         const durationMs = Date.now() - startTime;
 
         sendEvent('item_success', {
           index: i,
+          itemId,
+          batchId,
           url,
           fileName,
           format,
-          byteSize,
+          byteSize: fileBuffer.length,
           dimensions,
           durationMs,
-          dataUrl,
           previewDataUrl,
+          fileUrl: `/api/captures/${batchId}/${itemId}`,
           imgStats,
         });
       } catch (err: any) {

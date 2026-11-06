@@ -62,7 +62,7 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
               <h2 id="shortcuts-title" className="text-[15px] font-bold text-white">
                 Atalhos de teclado
               </h2>
-              <p className="text-[12px] text-slate-500">Navegue sem tirar as mãos do teclado.</p>
+              <p className="text-[12px] text-slate-400">Navegue sem tirar as mãos do teclado.</p>
             </div>
           </div>
           <button
@@ -70,7 +70,7 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
             type="button"
             onClick={onClose}
             aria-label="Fechar atalhos"
-            className="btn btn-ghost btn-icon text-slate-500 hover:text-white"
+            className="btn btn-ghost btn-icon text-slate-400 hover:text-white"
           >
             <X className="h-4 w-4" />
           </button>
@@ -92,7 +92,7 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
           ))}
         </div>
 
-        <div className="flex items-center gap-1.5 border-t border-white/[0.06] bg-black/20 px-5 py-3 text-[11.5px] text-slate-600">
+        <div className="flex items-center gap-1.5 border-t border-white/[0.06] bg-black/20 px-5 py-3 text-[11.5px] text-slate-400">
           <Command className="h-3 w-3" />
           No macOS, use <Kbd>Cmd</Kbd> + <Kbd>Enter</Kbd>; no Windows e Linux, <Kbd>Ctrl</Kbd> + <Kbd>Enter</Kbd>.
         </div>

@@ -20,9 +20,9 @@ interface TopBarProps {
   isRunning: boolean;
   isFocusMode: boolean;
   isConfigCollapsed: boolean;
-  isInspectorCollapsed: boolean;
+  isInspectorOpen: boolean;
   onToggleConfigCollapsed: () => void;
-  onToggleInspectorCollapsed: () => void;
+  onToggleInspector: () => void;
   onCapture: () => void;
   onStop: () => void;
   onShowShortcuts: () => void;
@@ -37,9 +37,9 @@ export function TopBar({
   isRunning,
   isFocusMode,
   isConfigCollapsed,
-  isInspectorCollapsed,
+  isInspectorOpen,
   onToggleConfigCollapsed,
-  onToggleInspectorCollapsed,
+  onToggleInspector,
   onCapture,
   onStop,
   onShowShortcuts,
@@ -72,7 +72,7 @@ export function TopBar({
 
       {/* Breadcrumb / mode */}
       <div className="ml-1 hidden items-center gap-1.5 border-l border-white/[0.08] pl-3 md:flex">
-        <span className="text-[12.5px] font-medium text-slate-500">Workspace</span>
+        <span className="text-[12.5px] font-medium text-slate-400">Workspace</span>
         <ChevronRight className="h-3 w-3 text-slate-700" />
         <span className="text-[12.5px] font-semibold text-slate-300">
           {isFocusMode ? 'Modo foco' : 'Captura em lote'}
@@ -82,7 +82,7 @@ export function TopBar({
             'ml-1 flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[11px]',
             isRunning
               ? 'border-amber-400/25 bg-amber-400/[0.08] text-amber-300'
-              : 'border-white/[0.08] bg-white/[0.03] text-slate-500'
+              : 'border-white/[0.08] bg-white/[0.03] text-slate-400'
           )}
         >
           <span
@@ -113,21 +113,28 @@ export function TopBar({
                 <PanelLeftClose className="h-[18px] w-[18px]" />
               )}
             </button>
-            <button
-              type="button"
-              onClick={onToggleInspectorCollapsed}
-              aria-pressed={!isInspectorCollapsed}
-              className="btn btn-ghost btn-icon hidden h-7 w-7 text-slate-500 hover:text-white 2xl:inline-flex"
-              title={isInspectorCollapsed ? 'Expandir inspetor' : 'Retrair inspetor'}
-              aria-label={isInspectorCollapsed ? 'Expandir inspetor' : 'Retrair inspetor'}
-            >
-              {isInspectorCollapsed ? (
-                <PanelRightOpen className="h-[18px] w-[18px]" />
-              ) : (
-                <PanelRightClose className="h-[18px] w-[18px]" />
-              )}
-            </button>
           </div>
+        )}
+
+        {!isFocusMode && (
+          <button
+            type="button"
+            onClick={onToggleInspector}
+            aria-pressed={isInspectorOpen}
+            aria-controls="inspector-panel"
+            aria-label={isInspectorOpen ? 'Fechar inspetor' : 'Abrir inspetor'}
+            title={isInspectorOpen ? 'Fechar inspetor' : 'Abrir inspetor'}
+            className={cn(
+              'btn btn-ghost btn-icon h-8 w-8',
+              isInspectorOpen ? 'text-amber-300' : 'text-slate-400 hover:text-white'
+            )}
+          >
+            {isInspectorOpen ? (
+              <PanelRightClose className="h-[18px] w-[18px]" />
+            ) : (
+              <PanelRightOpen className="h-[18px] w-[18px]" />
+            )}
+          </button>
         )}
 
         <button
@@ -162,7 +169,7 @@ export function TopBar({
           type="button"
           onClick={onNavigateHome}
           disabled={isRunning}
-          className="btn btn-ghost btn-sm text-slate-500 hover:text-slate-200"
+          className="btn btn-ghost btn-sm text-slate-400 hover:text-slate-200"
           title={isRunning ? 'Interrompa a captura para sair' : 'Sair do workspace'}
           aria-label="Sair do workspace"
         >

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { MAX_URLS } from '../lib/snapper';
 import {
   Camera,
   ArrowRight,
@@ -53,7 +54,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
               <span className="whitespace-nowrap text-[15.5px] font-extrabold tracking-[-0.02em] text-white">
                 Chromium Snapper
               </span>
-              <span className="hidden rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 font-mono text-[11px] text-slate-500 sm:inline">
+              <span className="hidden rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 font-mono text-[11px] text-slate-400 sm:inline">
                 v1.1
               </span>
             </div>
@@ -132,7 +133,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                 className="btn btn-secondary group gap-2 px-4 py-3"
               >
                 <span>Como funciona</span>
-                <ChevronDown className="h-4 w-4 text-slate-500 transition-transform group-hover:translate-y-0.5" />
+                <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-y-0.5" />
               </a>
             </div>
 
@@ -140,19 +141,19 @@ export function LandingPage({ onLogin }: LandingPageProps) {
             <div className="mx-auto mt-11 grid max-w-4xl grid-cols-2 gap-px overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.07] text-left sm:grid-cols-4">
               <div className="flex flex-col gap-1 bg-[#080b12] px-4 py-3.5">
                 <span className="text-[20px] font-bold text-white">100% Local</span>
-                <span className="text-[11.5px] leading-snug text-slate-500">Zero transmissão externa de dados</span>
+                <span className="text-[11.5px] leading-snug text-slate-400">Zero transmissão externa de dados</span>
               </div>
               <div className="flex flex-col gap-1 bg-[#080b12] px-4 py-3.5">
                 <span className="text-[20px] font-bold text-amber-300">Full HD & 4K</span>
-                <span className="text-[11.5px] leading-snug text-slate-500">Emulação de viewport até 3840px</span>
+                <span className="text-[11.5px] leading-snug text-slate-400">Emulação de viewport até 7680 px</span>
               </div>
               <div className="flex flex-col gap-1 bg-[#080b12] px-4 py-3.5">
                 <span className="text-[20px] font-bold text-white">Full-Scroll</span>
-                <span className="text-[11.5px] leading-snug text-slate-500">Disparo forçado de lazy-loading</span>
+                <span className="text-[11.5px] leading-snug text-slate-400">Disparo forçado de lazy-loading</span>
               </div>
               <div className="flex flex-col gap-1 bg-[#080b12] px-4 py-3.5">
                 <span className="text-[20px] font-bold text-emerald-300">Multi-Formato</span>
-                <span className="text-[11.5px] leading-snug text-slate-500">WebP, PNG, JPG e PDF</span>
+                <span className="text-[11.5px] leading-snug text-slate-400">WebP, PNG, JPG e PDF</span>
               </div>
             </div>
           </div>
@@ -223,7 +224,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                 <div className="flex flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-[#070a12] lg:col-span-8">
                   {/* Browser Bar */}
                   <div className="flex items-center gap-2 border-b border-white/[0.06] bg-black/40 px-3 py-2 text-[12.5px] text-slate-400">
-                    <span className="font-mono text-slate-500">GET</span>
+                    <span className="font-mono text-slate-400">GET</span>
                     <span className="flex-1 truncate rounded bg-white/[0.03] px-2 py-0.5 font-mono text-[12px] text-slate-300">
                       https://stripe.com/enterprise/global-billing-infrastructure
                     </span>
@@ -287,7 +288,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
 
                     <div className="mt-3 space-y-2.5 font-mono text-[12.5px]">
                       <div className="flex items-center justify-between border-b border-white/[0.05] pb-1.5">
-                        <span className="text-slate-500">Emulação Viewport</span>
+                        <span className="text-slate-400">Emulação Viewport</span>
                         <span className="text-white">
                           {activeDevice === 'desktop'
                             ? '1920 × 1080 @2x'
@@ -297,23 +298,23 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                         </span>
                       </div>
                       <div className="flex items-center justify-between border-b border-white/[0.05] pb-1.5">
-                        <span className="text-slate-500">Modo de Captura</span>
+                        <span className="text-slate-400">Modo de Captura</span>
                         <span className="text-amber-300">Página Inteira (Full-Page)</span>
                       </div>
                       <div className="flex items-center justify-between border-b border-white/[0.05] pb-1.5">
-                        <span className="text-slate-500">Formato de Saída</span>
+                        <span className="text-slate-400">Formato de Saída</span>
                         <span className="text-white">PNG Lossless / PDF</span>
                       </div>
                       <div className="flex items-center justify-between border-b border-white/[0.05] pb-1.5">
-                        <span className="text-slate-500">Delay de Hidratação</span>
+                        <span className="text-slate-400">Delay de Hidratação</span>
                         <span className="text-emerald-400">1.200 ms</span>
                       </div>
                       <div className="flex items-center justify-between border-b border-white/[0.05] pb-1.5">
-                        <span className="text-slate-500">Scroll Acelerado</span>
+                        <span className="text-slate-400">Scroll Acelerado</span>
                         <span className="text-white">Ativo (Passos de 600px)</span>
                       </div>
                       <div className="flex items-center justify-between pb-1">
-                        <span className="text-slate-500">Sanitização CSS</span>
+                        <span className="text-slate-400">Sanitização CSS</span>
                         <span className="text-emerald-400">Enabled</span>
                       </div>
                     </div>
@@ -396,7 +397,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                 <h3 className="mt-5 text-[18.5px] font-bold text-white">Rasterização & Empacotamento</h3>
                 <p className="mt-2 text-[15px] leading-relaxed text-slate-400">
                   Captura unificada em PNG sem perdas, WebP balanceado ou PDF vetorial.
-                  Download individual ou consolidado em lote ZIP criptografado.
+                  Download individual ou consolidado em um único ZIP.
                 </p>
               </div>
             </div>
@@ -586,7 +587,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                     </td>
                     <td className="py-4 px-6 text-emerald-400 font-medium">
                       <span className="inline-flex items-center gap-1.5">
-                        <Check className="h-4 w-4" /> PDF vetorial nativo com links ativos
+                        <Check className="h-4 w-4" /> PDF vetorial nativo com texto selecionável
                       </span>
                     </td>
                   </tr>
@@ -664,15 +665,15 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                 },
                 {
                   q: 'É possível capturar páginas que exigem login ou credenciais?',
-                  a: 'Sim. A aplicação conta com suporte a cabeçalhos de autenticação customizados, cookies de sessão e bypass de autenticação por injeção direta de storage.',
+                  a: 'Sim. A aplicação aceita headers HTTP e cookies de sessão para capturar áreas autenticadas e ambientes de staging.',
                 },
                 {
                   q: 'O processamento consome servidores externos?',
                   a: 'Não. O processamento é 100% local ou executado em seu nó dedicado Chromium. Nenhuma informação ou imagem trafega por servidores de terceiros.',
                 },
                 {
-                  q: 'Quantas URLs posso processar simultaneamente?',
-                  a: 'O sistema gerencia pools concorrentes de execução, permitindo lotes de até 25 URLs simultâneas com relatórios de status em tempo real e exportação direta em arquivo ZIP consolidado.',
+                  q: 'Quantas URLs posso processar por lote?',
+                  a: `O processamento é sequencial para preservar a estabilidade do Chromium: lotes de até ${MAX_URLS} URLs, com status em tempo real por URL e exportação consolidada em ZIP.`,
                 },
               ].map((faq, idx) => (
                 <div
@@ -740,7 +741,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
             <span className="text-[13px] font-bold text-white">Chromium Snapper</span>
           </div>
 
-          <div className="text-[14px] text-slate-500">
+          <div className="text-[14px] text-slate-400">
             Captura local de alta fidelidade · Todos os direitos reservados.
           </div>
 

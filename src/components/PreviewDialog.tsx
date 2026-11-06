@@ -42,6 +42,7 @@ export function PreviewDialog({
   const [zoom, setZoom] = useState<Zoom>('fit');
   const [naturalWidth, setNaturalWidth] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -55,6 +56,7 @@ export function PreviewDialog({
     setZoom('fit');
     setNaturalWidth(0);
     setLoaded(false);
+    setImageFailed(false);
   }, [item.id]);
 
   useEffect(() => {
@@ -104,6 +106,9 @@ export function PreviewDialog({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [next, onClose, onNavigate, previous]);
 
+  const fullSource =
+    item.format === 'pdf' ? item.previewDataUrl : item.fileUrl || item.previewDataUrl;
+  const displaySource = imageFailed ? item.previewDataUrl : fullSource;
   const imageWidth = zoom === 'fit' ? 0 : Math.max(160, ((naturalWidth || 1200) * zoom) / 100);
   const displayZoom = zoom === 'fit' ? 'Ajustar' : `${zoom}%`;
 
@@ -131,7 +136,7 @@ export function PreviewDialog({
           <span className="max-w-[36vw] truncate font-mono text-[12.5px] text-slate-200" title={item.fileName}>
             {item.fileName}
           </span>
-          <span className="hidden items-center gap-2 font-mono text-[11.5px] text-slate-500 sm:flex">
+          <span className="hidden items-center gap-2 font-mono text-[11.5px] text-slate-400 sm:flex">
             <span className="h-3 w-px bg-white/10" />
             {item.dimensions?.pageWidth} × {item.dimensions?.pageHeight} px
             <span className="text-slate-700">·</span>
@@ -259,8 +264,9 @@ export function PreviewDialog({
               <div className="absolute inset-0 min-h-[240px] animate-pulse bg-white/[0.03]" />
             )}
             <img
-              src={item.previewDataUrl || item.dataUrl}
+              src={displaySource}
               alt={`Captura de ${hostOf(item.url)}`}
+              onError={() => setImageFailed(true)}
               onLoad={(event) => {
                 setNaturalWidth(event.currentTarget.naturalWidth);
                 setLoaded(true);
@@ -272,7 +278,7 @@ export function PreviewDialog({
             />
           </div>
           {item.format === 'pdf' && (
-            <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-[11.5px] text-slate-500">
+            <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-[11.5px] text-slate-400">
               <FileText className="h-3 w-3 text-rose-400/80" />
               Prévia da viewport — o PDF vetorial contínuo é gerado no download.
             </p>
@@ -281,7 +287,7 @@ export function PreviewDialog({
       </div>
 
       {/* Footer */}
-      <div className="flex min-h-10 shrink-0 items-center justify-between gap-3 border-t border-white/[0.06] bg-[#070a11] px-3 text-[11.5px] text-slate-500 sm:px-5">
+      <div className="flex min-h-10 shrink-0 items-center justify-between gap-3 border-t border-white/[0.06] bg-[#070a11] px-3 text-[11.5px] text-slate-400 sm:px-5">
         <a
           href={hrefOf(item.url)}
           target="_blank"
@@ -307,7 +313,7 @@ export function PreviewDialog({
             fechar
           </span>
           {index >= 0 && (
-            <span className="font-mono text-slate-600">
+            <span className="font-mono text-slate-400">
               {index + 1} / {items.length}
             </span>
           )}

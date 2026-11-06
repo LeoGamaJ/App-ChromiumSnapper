@@ -31,7 +31,7 @@ export function ConfigRail({
       <button
         type="button"
         onClick={onExpand}
-        className="btn btn-ghost btn-icon h-8 w-8 text-slate-500 hover:text-white"
+        className="btn btn-ghost btn-icon h-8 w-8 text-slate-400 hover:text-white"
         title="Expandir configuração"
         aria-label="Expandir configuração"
       >
@@ -58,7 +58,7 @@ export function ConfigRail({
                 'relative flex h-10 w-10 items-center justify-center rounded-lg border transition-colors',
                 active
                   ? 'border-amber-400/30 bg-amber-400/[0.1] text-amber-300'
-                  : 'border-transparent text-slate-500 hover:bg-white/[0.05] hover:text-slate-200'
+                  : 'border-transparent text-slate-400 hover:bg-white/[0.05] hover:text-slate-200'
               )}
             >
               <Icon className="h-[18px] w-[18px]" />
@@ -79,7 +79,7 @@ export function ConfigRail({
             'flex h-5 min-w-5 items-center justify-center rounded-full border px-1.5 font-mono text-[10.5px] font-semibold',
             canRun
               ? 'border-amber-400/25 bg-amber-400/[0.08] text-amber-300'
-              : 'border-white/[0.08] bg-white/[0.03] text-slate-500'
+              : 'border-white/[0.08] bg-white/[0.03] text-slate-400'
           )}
           title={`${urlCount} ${urlCount === 1 ? 'link na fila' : 'links na fila'}`}
         >
@@ -107,7 +107,7 @@ export function ConfigRail({
         <button
           type="button"
           onClick={onExpand}
-          className="[writing-mode:vertical-rl] rotate-180 text-[9.5px] font-bold uppercase tracking-[0.2em] text-slate-600 transition-colors hover:text-slate-300"
+          className="[writing-mode:vertical-rl] rotate-180 text-[9.5px] font-bold uppercase tracking-[0.2em] text-slate-400 transition-colors hover:text-slate-300"
           aria-label="Expandir configuração"
           tabIndex={-1}
         >

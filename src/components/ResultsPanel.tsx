@@ -4,6 +4,7 @@ import {
   Check,
   CheckCircle2,
   CircleSlash,
+  Clock,
   Copy,
   Download,
   ExternalLink,
@@ -15,7 +16,8 @@ import {
   Keyboard,
   Layers,
   Maximize2,
-  Play,
+  Pencil,
+  Plus,
   RefreshCw,
   ScanLine,
   Trash2,
@@ -27,6 +29,9 @@ import {
   formatDuration,
   hrefOf,
   hostOf,
+  isCaptured,
+  isFailed,
+  isPending,
   pathOf,
   stepLabel,
   type CapturedItem,
@@ -58,11 +63,18 @@ interface ResultsPanelProps {
   onRemove: (id: string) => void;
   onRetry: (item: CapturedItem) => void;
   onZip: () => void;
+  onZipCancel: () => void;
   onClear: () => void;
-  onTrySample: () => void;
+  onAddExamples: () => void;
+  onRename: (item: CapturedItem) => void;
   onShowShortcuts: () => void;
-  zipState: { active: boolean; done: number; total: number };
-  clearArmed: boolean;
+  zipState: {
+    active: boolean;
+    total: number;
+    loadedBytes: number;
+    totalBytes: number;
+    percent: number;
+  };
 }
 
 export function ResultsPanel({
@@ -83,16 +95,18 @@ export function ResultsPanel({
   onRemove,
   onRetry,
   onZip,
+  onZipCancel,
   onClear,
-  onTrySample,
+  onAddExamples,
+  onRename,
   onShowShortcuts,
   zipState,
-  clearArmed,
 }: ResultsPanelProps) {
   const [density, setDensity] = useState<GalleryDensity>('comfortable');
 
-  const validItems = items.filter((item) => item.dataUrl && !item.error);
-  const failedItems = items.filter((item) => Boolean(item.error) || !item.dataUrl);
+  const validItems = items.filter(isCaptured);
+  const failedItems = items.filter(isFailed);
+  const pendingItems = items.filter(isPending);
   const totalBytes = validItems.reduce((sum, item) => sum + (item.byteSize || 0), 0);
   const visibleItems =
     filter === 'error' ? failedItems : filter === 'success' ? validItems : items;
@@ -120,10 +134,15 @@ export function ResultsPanel({
             Galeria
           </h2>
           <span className="chip">
-            {items.length} {items.length === 1 ? 'captura' : 'capturas'}
+            {validItems.length} {validItems.length === 1 ? 'captura' : 'capturas'}
           </span>
+          {pendingItems.length > 0 && (
+            <span className="chip chip-blue">
+              {pendingItems.length} na fila
+            </span>
+          )}
           {validItems.length > 0 && (
-            <span className="hidden items-center gap-1.5 font-mono text-[11.5px] text-slate-500 xl:flex">
+            <span className="hidden items-center gap-1.5 font-mono text-[11.5px] text-slate-400 xl:flex">
               <span className="h-3 w-px bg-white/10" />
               {formatBytes(totalBytes)}
             </span>
@@ -153,7 +172,7 @@ export function ResultsPanel({
                     'rounded-md px-2 py-1 text-[12px] font-semibold transition-colors',
                     filter === option.id
                       ? 'bg-white/[0.08] text-white'
-                      : 'text-slate-500 hover:text-slate-300'
+                      : 'text-slate-400 hover:text-slate-300'
                   )}
                 >
                   {option.label}
@@ -171,7 +190,7 @@ export function ResultsPanel({
                   'h-7 w-7 rounded-md',
                   density === 'comfortable'
                     ? 'bg-white/[0.09] text-amber-300'
-                    : 'text-slate-500 hover:text-slate-300'
+                    : 'text-slate-400 hover:text-slate-300'
                 )}
               >
                 <Grid2X2 className="h-4 w-4" />
@@ -183,7 +202,7 @@ export function ResultsPanel({
                   'h-7 w-7 rounded-md',
                   density === 'compact'
                     ? 'bg-white/[0.09] text-amber-300'
-                    : 'text-slate-500 hover:text-slate-300'
+                    : 'text-slate-400 hover:text-slate-300'
                 )}
               >
                 <Grid3X3 className="h-4 w-4" />
@@ -191,45 +210,62 @@ export function ResultsPanel({
             </div>
           )}
 
-          {items.length > 0 && (
+          {zipState.active ? (
+            <div
+              className="flex items-center gap-1.5 rounded-lg border border-amber-400/25 bg-amber-400/[0.08] px-2 py-1.5"
+              title={
+                zipState.totalBytes > 0
+                  ? `Gerando ZIP: ${zipState.percent}%`
+                  : 'Gerando ZIP'
+              }
+            >
+              <Spinner className="h-3.5 w-3.5 text-amber-400" />
+              <span className="font-mono text-[11.5px] font-bold text-amber-200">
+                {zipState.totalBytes > 0 ? `${zipState.percent}%` : 'ZIP'}
+              </span>
+              <span className="hidden text-[11.5px] text-slate-300 sm:inline">
+                gerando
+              </span>
+              <button
+                type="button"
+                onClick={onZipCancel}
+                aria-label="Cancelar geração do ZIP"
+                title="Cancelar geração do ZIP"
+                className="flex h-6 w-6 items-center justify-center rounded text-slate-400 transition-colors hover:bg-rose-400/10 hover:text-rose-300"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : validItems.length > 0 ? (
             <button
               type="button"
               onClick={onZip}
-              disabled={validItems.length === 0 || zipState.active || isRunning}
+              disabled={isRunning}
               className="btn btn-primary btn-sm"
               title="Baixar todas as capturas em um arquivo ZIP"
+              aria-label={`Baixar ZIP com ${validItems.length} ${
+                validItems.length === 1 ? 'arquivo' : 'arquivos'
+              }`}
             >
-              {zipState.active ? (
-                <Spinner className="h-3.5 w-3.5" />
-              ) : (
-                <FileArchive className="h-3.5 w-3.5" />
-              )}
-              <span className="hidden sm:inline">
-                {zipState.active
-                  ? `Compactando ${zipState.done}/${zipState.total}`
-                  : 'Baixar .zip'}
-              </span>
-              <span className="font-mono text-[11.5px] font-bold opacity-70">
+              <FileArchive className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Baixar ZIP</span>
+              <span aria-hidden="true" className="font-mono text-[11.5px] font-bold opacity-70">
                 {validItems.length}
               </span>
             </button>
-          )}
+          ) : null}
 
           {items.length > 0 && (
             <button
               type="button"
               onClick={onClear}
               disabled={isRunning}
-              className={cn(
-                'btn btn-sm',
-                clearArmed ? 'btn-danger' : 'btn-ghost text-slate-500 hover:text-rose-300'
-              )}
+              aria-label="Limpar galeria"
+              className="btn btn-ghost btn-sm text-slate-400 hover:text-rose-300"
               title="Limpar galeria"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              <span className={cn(clearArmed ? 'inline' : 'hidden xl:inline')}>
-                {clearArmed ? 'Confirmar' : 'Limpar'}
-              </span>
+              <span className="hidden xl:inline">Limpar</span>
             </button>
           )}
         </div>
@@ -252,7 +288,7 @@ export function ResultsPanel({
           {items.length === 0 && !isRunning && (
             <EmptyCanvas
               urlCount={urlCount}
-              onTrySample={onTrySample}
+              onAddExamples={onAddExamples}
               onShowShortcuts={onShowShortcuts}
             />
           )}
@@ -261,13 +297,13 @@ export function ResultsPanel({
 
           {items.length > 0 && visibleItems.length === 0 && (
             <div className="panel mx-auto flex max-w-md flex-col items-center px-6 py-10 text-center">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-slate-500">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-slate-400">
                 <Images className="h-4 w-4" />
               </span>
               <p className="mt-3 text-[14.5px] font-semibold text-slate-200">
                 Nada neste filtro
               </p>
-              <p className="mt-1 text-[12.5px] text-slate-500">
+              <p className="mt-1 text-[12.5px] text-slate-400">
                 Ajuste o filtro para revisar as demais capturas.
               </p>
               <button
@@ -290,18 +326,23 @@ export function ResultsPanel({
               )}
             >
               {visibleItems.map((item) => {
-                const isFailed = Boolean(item.error) || !item.dataUrl;
-                return isFailed ? (
-                  <ErrorCard
-                    key={item.id}
-                    item={item}
-                    isRunning={isRunning}
-                    isSelected={selectedId === item.id}
-                    onSelect={onSelect}
-                    onRetry={onRetry}
-                    onRemove={onRemove}
-                  />
-                ) : (
+                if (isPending(item)) {
+                  return <QueueCard key={item.id} item={item} />;
+                }
+                if (isFailed(item)) {
+                  return (
+                    <ErrorCard
+                      key={item.id}
+                      item={item}
+                      isRunning={isRunning}
+                      isSelected={selectedId === item.id}
+                      onSelect={onSelect}
+                      onRetry={onRetry}
+                      onRemove={onRemove}
+                    />
+                  );
+                }
+                return (
                   <CaptureCard
                     key={item.id}
                     item={item}
@@ -311,6 +352,7 @@ export function ResultsPanel({
                     onDownload={onDownload}
                     onCopy={onCopy}
                     onRemove={onRemove}
+                    onRename={onRename}
                   />
                 );
               })}
@@ -320,13 +362,16 @@ export function ResultsPanel({
       </div>
 
       {/* Canvas status bar */}
-      <footer className="flex h-8 shrink-0 items-center justify-between gap-3 border-t border-white/[0.06] bg-[#070a11] px-3 text-[11.5px] text-slate-600 lg:px-4">
+      <footer className="flex h-8 shrink-0 items-center justify-between gap-3 border-t border-white/[0.06] bg-[#070a11] px-3 text-[11.5px] text-slate-400 lg:px-4">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400/80" />
           <span className="truncate">Processamento local — suas imagens não saem da máquina.</span>
         </span>
         <span className="flex shrink-0 items-center gap-2.5 font-mono">
-          <span className="hidden sm:inline">{items.length} {items.length === 1 ? 'artboard' : 'artboards'}</span>
+          <span className="hidden sm:inline">
+            {validItems.length} {validItems.length === 1 ? 'captura' : 'capturas'}
+            {pendingItems.length > 0 ? ` · ${pendingItems.length} na fila` : ''}
+          </span>
           {validItems.length > 0 && (
             <>
               <span className="hidden text-slate-700 sm:inline">·</span>
@@ -382,11 +427,11 @@ function RunStatusBar({
                 {stepLabel(progress.step)}
               </span>
             </div>
-            <p className="mt-0.5 truncate text-[12px] text-slate-500">
+            <p className="mt-0.5 truncate text-[12px] text-slate-400">
               {progress.statusText || 'Preparando o ambiente de captura...'}
             </p>
           </div>
-          <div className="hidden shrink-0 items-center gap-3 font-mono text-[11.5px] text-slate-500 sm:flex">
+          <div className="hidden shrink-0 items-center gap-3 font-mono text-[11.5px] text-slate-400 sm:flex">
             <span>{formatClock(elapsedMs)}</span>
             {etaMs !== null && <span>~{formatClock(etaMs)} restantes</span>}
             <span className="text-[15px] font-semibold tabular-nums text-white">{percent}%</span>
@@ -438,7 +483,7 @@ function RunStatusBar({
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-[13px] font-semibold text-white">{title}</p>
-        <p className="mt-0.5 truncate text-[12px] text-slate-500">{subtitle}</p>
+        <p className="mt-0.5 truncate text-[12px] text-slate-400">{subtitle}</p>
       </div>
       <span
         className={cn(
@@ -460,11 +505,11 @@ function RunStatusBar({
 
 function EmptyCanvas({
   urlCount,
-  onTrySample,
+  onAddExamples,
   onShowShortcuts,
 }: {
   urlCount: number;
-  onTrySample: () => void;
+  onAddExamples: () => void;
   onShowShortcuts: () => void;
 }) {
   return (
@@ -495,7 +540,7 @@ function EmptyCanvas({
         <h3 className="mt-5 text-[19.5px] font-bold tracking-[-0.02em] text-white">
           Seu canvas está vazio
         </h3>
-        <p className="mx-auto mt-2 max-w-md text-[14.5px] leading-relaxed text-slate-500">
+        <p className="mx-auto mt-2 max-w-md text-[14.5px] leading-relaxed text-slate-400">
           {urlCount > 0
             ? `Há ${urlCount} ${urlCount === 1 ? 'link pronto' : 'links prontos'} na fila. Inicie a captura para transformar cada página em um artboard aqui.`
             : 'Cole as URLs no painel de configuração e inicie o lote. Cada página capturada vira um artboard navegável neste canvas.'}
@@ -517,15 +562,15 @@ function EmptyCanvas({
               <p className="mt-0.5 text-[12px] font-semibold leading-tight text-slate-300">
                 {step.label}
               </p>
-              <p className="mt-0.5 text-[10.5px] leading-tight text-slate-600">{step.hint}</p>
+              <p className="mt-0.5 text-[10.5px] leading-tight text-slate-400">{step.hint}</p>
             </div>
           ))}
         </div>
 
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-          <button type="button" onClick={onTrySample} className="btn btn-primary btn-sm">
-            <Play className="h-3.5 w-3.5 fill-current" />
-            Capturar links de exemplo
+          <button type="button" onClick={onAddExamples} className="btn btn-primary btn-sm">
+            <Plus className="h-3.5 w-3.5" />
+            Adicionar links de exemplo
           </button>
           <button
             type="button"
@@ -538,19 +583,19 @@ function EmptyCanvas({
         </div>
 
         <div className="mt-6 flex flex-wrap items-center justify-center gap-1.5">
-          <span className="text-[10.5px] uppercase tracking-[0.14em] text-slate-600">
+          <span className="text-[10.5px] uppercase tracking-[0.14em] text-slate-400">
             Formatos
           </span>
           {['WebP', 'PDF', 'PNG', 'JPG'].map((format) => (
             <span
               key={format}
-              className="rounded border border-white/[0.07] bg-white/[0.02] px-1.5 py-0.5 font-mono text-[10.5px] text-slate-500"
+              className="rounded border border-white/[0.07] bg-white/[0.02] px-1.5 py-0.5 font-mono text-[10.5px] text-slate-400"
             >
               {format}
             </span>
           ))}
           <span className="mx-1 hidden h-3 w-px bg-white/10 sm:block" />
-          <span className="flex items-center gap-1 font-mono text-[10.5px] text-slate-600">
+          <span className="flex items-center gap-1 font-mono text-[10.5px] text-slate-400">
             <Keyboard className="h-2.5 w-2.5" /> Ctrl + Enter
           </span>
         </div>
@@ -595,6 +640,7 @@ function CaptureCard({
   onDownload,
   onCopy,
   onRemove,
+  onRename,
 }: {
   item: CapturedItem;
   isSelected: boolean;
@@ -603,6 +649,7 @@ function CaptureCard({
   onDownload: (item: CapturedItem) => void;
   onCopy: (item: CapturedItem) => void;
   onRemove: (id: string) => void;
+  onRename: (item: CapturedItem) => void;
 }) {
   return (
     <article
@@ -618,13 +665,17 @@ function CaptureCard({
         <span className="h-1.5 w-1.5 rounded-full bg-rose-400/45" />
         <span className="h-1.5 w-1.5 rounded-full bg-amber-400/45" />
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/40" />
-        <span
-          className="ml-1.5 min-w-0 flex-1 truncate font-mono text-[11px] text-slate-500"
-          title={item.fileName}
+        <button
+          type="button"
+          onClick={() => onRename(item)}
+          title="Renomear arquivo antes de baixar"
+          aria-label={`Renomear arquivo ${item.fileName}`}
+          className="ml-1.5 flex min-w-0 flex-1 items-center gap-1 overflow-hidden rounded px-0.5 text-left font-mono text-[11px] text-slate-400 transition-colors hover:text-amber-300 focus-visible:text-amber-300"
         >
-          {item.fileName}
-        </span>
-        <span className="hidden shrink-0 font-mono text-[11px] text-slate-600 group-hover:hidden sm:inline">
+          <span className="truncate">{item.fileName}</span>
+          <Pencil className="h-2.5 w-2.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100" />
+        </button>
+        <span className="hidden shrink-0 font-mono text-[11px] text-slate-400 group-hover:hidden sm:inline">
           {item.capturedAt}
         </span>
         <button
@@ -632,7 +683,7 @@ function CaptureCard({
           onClick={() => onRemove(item.id)}
           aria-label={`Remover captura de ${hostOf(item.url)}`}
           title="Remover captura"
-          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-500 opacity-100 transition-colors hover:bg-rose-400/10 hover:text-rose-300 sm:opacity-0 sm:group-hover:opacity-100"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 opacity-100 transition-colors hover:bg-rose-400/10 hover:text-rose-300 focus-visible:bg-rose-400/10 focus-visible:text-rose-200 focus-visible:opacity-100 group-focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
         >
           <X className="h-3 w-3" />
         </button>
@@ -677,15 +728,15 @@ function CaptureCard({
           >
             <span className="truncate">
               {hostOf(item.url)}
-              <span className="font-medium text-slate-500">{pathOf(item.url)}</span>
+              <span className="font-medium text-slate-400">{pathOf(item.url)}</span>
             </span>
-            <ExternalLink className="h-3 w-3 shrink-0 text-slate-600 transition-colors group-hover/link:text-amber-400" />
+            <ExternalLink className="h-3 w-3 shrink-0 text-slate-400 transition-colors group-hover/link:text-amber-400" />
           </a>
         </div>
 
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-slate-500">
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-slate-400">
           <span>
-            {item.dimensions?.pageWidth} × {item.dimensions?.pageHeight}
+            {item.dimensions?.pageWidth ?? '—'} × {item.dimensions?.pageHeight ?? '—'}
           </span>
           <span className="text-slate-700">·</span>
           <span>{formatBytes(item.byteSize)}</span>
@@ -715,7 +766,7 @@ function CaptureCard({
             <button
               type="button"
               onClick={() => onCopy(item)}
-              className="btn btn-ghost btn-sm btn-icon text-slate-500 hover:text-slate-200"
+              className="btn btn-ghost btn-sm btn-icon text-slate-400 hover:text-slate-200"
               title="Copiar imagem"
               aria-label="Copiar imagem para a área de transferência"
             >
@@ -730,6 +781,106 @@ function CaptureCard({
             <Download className="h-3.5 w-3.5" />
             Baixar
           </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function QueueCard({ item }: { item: CapturedItem }) {
+  const isCurrent = item.status === 'processing';
+
+  return (
+    <article
+      aria-label={`${isCurrent ? 'Capturando' : 'Na fila'}: ${hostOf(item.url)}`}
+      className={cn(
+        'artboard flex flex-col overflow-hidden rounded-xl border bg-[#0a0e16]',
+        isCurrent
+          ? 'border-amber-400/30 shadow-[0_0_0_1px_rgba(245,166,35,0.12)]'
+          : 'border-white/[0.08]'
+      )}
+    >
+      <div className="flex h-7 shrink-0 items-center gap-1.5 border-b border-white/[0.05] bg-[#0c1119] px-2.5">
+        <span className="h-1.5 w-1.5 rounded-full bg-white/[0.14]" />
+        <span className="h-1.5 w-1.5 rounded-full bg-white/[0.1]" />
+        <span className="h-1.5 w-1.5 rounded-full bg-white/[0.08]" />
+        <span className="ml-1.5 min-w-0 flex-1 truncate font-mono text-[11px] text-slate-400">
+          {item.fileName || hostOf(item.url)}
+        </span>
+        <span
+          className={cn(
+            'rounded border px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide',
+            isCurrent
+              ? 'border-amber-400/30 bg-amber-400/10 text-amber-300'
+              : 'border-sky-400/25 bg-sky-400/10 text-sky-300'
+          )}
+        >
+          {isCurrent ? 'capturando' : 'na fila'}
+        </span>
+      </div>
+
+      <div className="relative aspect-[16/10] w-full shrink-0 overflow-hidden bg-[#060910]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(245,166,35,0.06),transparent_60%)]" />
+        <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-white/[0.035] via-transparent to-transparent" />
+        <div className="relative flex h-full flex-col items-center justify-center gap-2.5 px-6 text-center">
+          <span
+            className={cn(
+              'flex h-9 w-9 items-center justify-center rounded-xl border',
+              isCurrent
+                ? 'border-amber-400/25 bg-amber-400/[0.08] text-amber-300'
+                : 'border-white/[0.08] bg-white/[0.03] text-slate-400'
+            )}
+          >
+            {isCurrent ? (
+              <Spinner className="h-4 w-4" />
+            ) : (
+              <Clock className="h-4 w-4" />
+            )}
+          </span>
+          <span className="text-[12.5px] font-semibold text-slate-300">
+            {isCurrent ? stepLabel(item.step || 'running') : 'Aguardando na fila'}
+          </span>
+          <span className="max-w-full truncate font-mono text-[10.5px] text-slate-400">
+            {hostOf(item.url)}
+            {pathOf(item.url)}
+          </span>
+          <span className="flex items-center gap-1" aria-hidden="true">
+            <span className={cn('h-1 w-6 rounded-full', isCurrent ? 'bg-amber-400/70' : 'bg-white/[0.12]')} />
+            <span className={cn('h-1 w-6 rounded-full', isCurrent ? 'bg-amber-400/40' : 'bg-white/[0.08]')} />
+            <span className={cn('h-1 w-6 rounded-full', isCurrent ? 'bg-amber-400/20' : 'bg-white/[0.05]')} />
+          </span>
+        </div>
+        <span className="absolute left-2 top-2">
+          <FormatBadge format={item.format} />
+        </span>
+      </div>
+
+      <div className="flex flex-1 flex-col p-3">
+        <p className="min-w-0 truncate text-[14.5px] font-bold text-slate-100">
+          {hostOf(item.url)}
+          <span className="font-medium text-slate-400">{pathOf(item.url)}</span>
+        </p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-slate-400">
+          <span>#{item.index + 1}</span>
+          <span className="text-slate-700">·</span>
+          <span>
+            {item.dimensions?.pageWidth ?? '—'} × {item.dimensions?.pageHeight || '—'}
+          </span>
+          <span className="text-slate-700">·</span>
+          <span>{isCurrent ? stepLabel(item.step || 'running') : 'aguardando'}</span>
+        </div>
+        <div className="mt-2.5 flex h-[34px] items-center justify-center gap-1.5 border-t border-white/[0.05] pt-2.5 text-[11.5px] text-slate-400">
+          {isCurrent ? (
+            <>
+              <Spinner className="h-3 w-3 text-amber-400" />
+              Processando...
+            </>
+          ) : (
+            <>
+              <Clock className="h-3 w-3" />
+              Aguardando na fila
+            </>
+          )}
         </div>
       </div>
     </article>
@@ -765,7 +916,7 @@ function ErrorCard({
         <span className="ml-1 truncate font-mono text-[10.5px] text-rose-200/70">
           erro de captura
         </span>
-        <span className="ml-auto font-mono text-[10.5px] text-slate-600">{item.capturedAt}</span>
+        <span className="ml-auto font-mono text-[10.5px] text-slate-400">{item.capturedAt}</span>
       </div>
 
       <div className="flex flex-1 flex-col p-3.5">
@@ -781,9 +932,9 @@ function ErrorCard({
           >
             <span className="block truncate text-[14px] font-semibold text-slate-100">
               {hostOf(item.url)}
-              <span className="font-normal text-slate-500">{pathOf(item.url)}</span>
+              <span className="font-normal text-slate-400">{pathOf(item.url)}</span>
             </span>
-            <span className="mt-0.5 block truncate font-mono text-[11px] text-slate-600">
+            <span className="mt-0.5 block truncate font-mono text-[11px] text-slate-400">
               {item.url}
             </span>
           </button>
@@ -806,7 +957,7 @@ function ErrorCard({
           <button
             type="button"
             onClick={() => onRemove(item.id)}
-            className="btn btn-ghost btn-sm text-slate-500 hover:text-rose-300"
+            className="btn btn-ghost btn-sm text-slate-400 hover:text-rose-300"
           >
             <Trash2 className="h-3 w-3" />
             Remover
@@ -819,11 +970,11 @@ function ErrorCard({
 
 function Thumbnail({ item }: { item: CapturedItem }) {
   const [failed, setFailed] = useState(false);
-  const source = item.previewDataUrl || item.dataUrl;
+  const source = item.previewDataUrl;
 
   if (!source || failed) {
     return (
-      <span className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[#070b12] text-slate-600">
+      <span className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[#070b12] text-slate-400">
         <Images className="h-5 w-5" />
         <span className="text-[11.5px]">Prévia indisponível</span>
       </span>

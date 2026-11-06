@@ -91,6 +91,7 @@ interface ConfigPanelProps {
   onChange: (patch: Partial<CaptureSettings>) => void;
   rawUrls: string;
   onRawUrlsChange: (value: string) => void;
+  onClearUrls: () => void;
   urls: string[];
   isRunning: boolean;
   tab: TabId;
@@ -107,6 +108,7 @@ export function ConfigPanel({
   onChange,
   rawUrls,
   onRawUrlsChange,
+  onClearUrls,
   urls,
   isRunning,
   tab,
@@ -149,7 +151,7 @@ export function ConfigPanel({
               <h2 className="truncate text-[15px] font-bold tracking-[-0.01em] text-white">
                 Configuração do lote
               </h2>
-              <p className="mt-0.5 truncate text-[12px] text-slate-500">
+              <p className="mt-0.5 truncate text-[12px] text-slate-400">
                 Fila, viewport e formato de saída.
               </p>
             </div>
@@ -159,7 +161,7 @@ export function ConfigPanel({
               <button
                 type="button"
                 onClick={onCollapse}
-                className="btn btn-ghost btn-icon hidden h-7 w-7 text-slate-500 hover:text-slate-200 lg:inline-flex"
+                className="btn btn-ghost btn-icon hidden h-7 w-7 text-slate-400 hover:text-slate-200 lg:inline-flex"
                 title="Retrair configuração"
                 aria-label="Retrair configuração"
               >
@@ -170,7 +172,7 @@ export function ConfigPanel({
               type="button"
               onClick={onReset}
               disabled={isRunning}
-              className="btn btn-ghost btn-icon h-7 w-7 text-slate-500 hover:text-slate-200"
+              className="btn btn-ghost btn-icon h-7 w-7 text-slate-400 hover:text-slate-200"
               title="Restaurar configurações padrão"
               aria-label="Restaurar configurações padrão"
             >
@@ -180,7 +182,7 @@ export function ConfigPanel({
               <button
                 type="button"
                 onClick={onClose}
-                className="btn btn-ghost btn-icon h-7 w-7 text-slate-500 hover:text-white lg:hidden"
+                className="btn btn-ghost btn-icon h-7 w-7 text-slate-400 hover:text-white lg:hidden"
                 aria-label="Fechar configuração"
               >
                 <X className="h-4 w-4" />
@@ -216,11 +218,11 @@ export function ConfigPanel({
                   'relative flex items-center justify-center gap-1.5 rounded-md px-1.5 py-1.5 text-[12.5px] font-semibold transition-colors',
                   active
                     ? 'bg-white/[0.08] text-white shadow-sm ring-1 ring-white/10'
-                    : 'text-slate-500 hover:bg-white/[0.03] hover:text-slate-300'
+                    : 'text-slate-400 hover:bg-white/[0.03] hover:text-slate-300'
                 )}
               >
                 <Icon
-                  className={cn('h-3.5 w-3.5', active ? 'text-amber-400' : 'text-slate-500')}
+                  className={cn('h-3.5 w-3.5', active ? 'text-amber-400' : 'text-slate-400')}
                 />
                 <span>{item.label}</span>
                 {item.id === 'advanced' &&
@@ -245,6 +247,7 @@ export function ConfigPanel({
             <LinksTab
               rawUrls={rawUrls}
               onRawUrlsChange={onRawUrlsChange}
+              onClearUrls={onClearUrls}
               urls={urls}
               duplicates={duplicates}
               overLimit={overLimit}
@@ -321,6 +324,7 @@ export function ConfigPanel({
 function LinksTab({
   rawUrls,
   onRawUrlsChange,
+  onClearUrls,
   urls,
   duplicates,
   overLimit,
@@ -328,6 +332,7 @@ function LinksTab({
 }: {
   rawUrls: string;
   onRawUrlsChange: (value: string) => void;
+  onClearUrls: () => void;
   urls: string[];
   duplicates: number;
   overLimit: boolean;
@@ -340,7 +345,7 @@ function LinksTab({
           <label htmlFor="url-list" className="label">
             URLs de destino
           </label>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-slate-500">
+          <p className="mt-1 text-[12.5px] leading-relaxed text-slate-400">
             Uma URL por linha — o protocolo é detectado automaticamente.
           </p>
         </div>
@@ -361,9 +366,9 @@ function LinksTab({
           autoCorrect="off"
           disabled={isRunning}
           aria-describedby="url-list-hint"
-          className="field h-[190px] w-full resize-none px-3.5 py-3 font-mono text-[14.5px] leading-[1.85] text-slate-200 placeholder:text-slate-600"
+          className="field h-[190px] w-full resize-none px-3.5 py-3 font-mono text-[14.5px] leading-[1.85] text-slate-200 placeholder:text-slate-400"
         />
-        <div className="pointer-events-none absolute bottom-2.5 right-3 flex items-center gap-1.5 rounded-md bg-[#070b12]/80 px-1.5 py-0.5 font-mono text-[11.5px] text-slate-600 backdrop-blur">
+        <div className="pointer-events-none absolute bottom-2.5 right-3 flex items-center gap-1.5 rounded-md bg-[#070b12]/80 px-1.5 py-0.5 font-mono text-[11.5px] text-slate-400 backdrop-blur">
           <span className={cn(urls.length > 0 ? 'text-amber-400/90' : '')}>{urls.length}</span>
           <span>linhas</span>
         </div>
@@ -399,14 +404,14 @@ function LinksTab({
 
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+          <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">
             Presets rápidos
           </span>
           <button
             type="button"
-            onClick={() => onRawUrlsChange('')}
+            onClick={onClearUrls}
             disabled={isRunning || rawUrls.length === 0}
-            className="flex items-center gap-1 text-[12.5px] font-medium text-slate-500 transition-colors hover:text-rose-300 disabled:opacity-40"
+            className="flex items-center gap-1 text-[12.5px] font-medium text-slate-400 transition-colors hover:text-rose-300 disabled:opacity-40"
           >
             <Trash2 className="h-3 w-3" />
             Limpar lista
@@ -424,7 +429,7 @@ function LinksTab({
                 disabled={isRunning}
                 className="group inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.02] px-2.5 py-1.5 text-[12.5px] font-medium text-slate-400 transition-colors hover:border-amber-400/30 hover:bg-amber-400/[0.06] hover:text-amber-200 disabled:opacity-50"
               >
-                <Icon className="h-3.5 w-3.5 text-slate-500 transition-colors group-hover:text-amber-400" />
+                <Icon className="h-3.5 w-3.5 text-slate-400 transition-colors group-hover:text-amber-400" />
                 {preset.name}
               </button>
             );
@@ -432,7 +437,7 @@ function LinksTab({
         </div>
       </div>
 
-      <p id="url-list-hint" className="text-[12px] leading-relaxed text-slate-600">
+      <p id="url-list-hint" className="text-[12px] leading-relaxed text-slate-400">
         <Code2 className="mr-1 inline h-3 w-3 align-[-2px]" />
         Aceita domínios sem protocolo, rotas internas e parâmetros de query.
       </p>
@@ -470,7 +475,7 @@ function DimensionField({
 
   return (
     <label className="block">
-      <span className="mb-1 block text-[12px] font-medium text-slate-500">{label}</span>
+      <span className="mb-1 block text-[12px] font-medium text-slate-400">{label}</span>
       <span className="field flex items-center">
         <input
           type="number"
@@ -493,7 +498,7 @@ function DimensionField({
           disabled={disabled}
           className="w-full bg-transparent px-2.5 py-2 font-mono text-[14px] text-slate-200 focus:outline-none"
         />
-        <span className="pr-2.5 font-mono text-[11.5px] text-slate-600">px</span>
+        <span className="pr-2.5 font-mono text-[11.5px] text-slate-400">px</span>
       </span>
     </label>
   );
@@ -515,7 +520,7 @@ function ViewportTab({
       <div>
         <div className="flex items-center justify-between">
           <span className="label">Resolução emulada</span>
-          <span className="font-mono text-[12px] text-slate-500">
+          <span className="font-mono text-[12px] text-slate-400">
             {settings.width} × {settings.height}
           </span>
         </div>
@@ -546,7 +551,7 @@ function ViewportTab({
               >
                 <div className="flex items-start justify-between">
                   <Icon
-                    className={cn('h-4 w-4', active ? 'text-amber-400' : 'text-slate-500')}
+                    className={cn('h-4 w-4', active ? 'text-amber-400' : 'text-slate-400')}
                   />
                   <span
                     className={cn(
@@ -562,7 +567,7 @@ function ViewportTab({
                 <span className="mt-2 block truncate text-[13px] font-semibold text-slate-200">
                   {preset.name}
                 </span>
-                <span className="mt-0.5 block font-mono text-[11px] text-slate-500">
+                <span className="mt-0.5 block font-mono text-[11px] text-slate-400">
                   {preset.desc}
                 </span>
               </button>
@@ -599,7 +604,7 @@ function ViewportTab({
       <div>
         <div className="mb-2 flex items-center justify-between">
           <span className="label">Preferência de tema</span>
-          <span className="text-[11.5px] text-slate-600">prefers-color-scheme</span>
+          <span className="text-[11.5px] text-slate-400">prefers-color-scheme</span>
         </div>
         <div
           role="radiogroup"
@@ -621,7 +626,7 @@ function ViewportTab({
                   'flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[12.5px] font-semibold transition-colors',
                   active
                     ? 'bg-white/[0.08] text-white shadow-sm ring-1 ring-white/10'
-                    : 'text-slate-500 hover:text-slate-300'
+                    : 'text-slate-400 hover:text-slate-300'
                 )}
               >
                 <Icon className={cn('h-3.5 w-3.5', active ? 'text-amber-400' : '')} />
@@ -630,14 +635,14 @@ function ViewportTab({
             );
           })}
         </div>
-        <p className="mt-2 text-[12px] leading-relaxed text-slate-600">
+        <p className="mt-2 text-[12px] leading-relaxed text-slate-400">
           Sites com suporte a dark mode são renderizados no tema escolhido.
         </p>
       </div>
 
       <div className="flex items-start gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2">
-        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
-        <p className="text-[12px] leading-relaxed text-slate-500">
+        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+        <p className="text-[12px] leading-relaxed text-slate-400">
           A largura define o layout responsivo; a altura é o viewport antes do full-page.
         </p>
       </div>
@@ -683,7 +688,7 @@ function OutputTab({
       <div>
         <div className="mb-2 flex items-center justify-between">
           <span className="label">Formato de saída</span>
-          <span className="text-[11.5px] text-slate-600">1 arquivo por URL</span>
+          <span className="text-[11.5px] text-slate-400">1 arquivo por URL</span>
         </div>
         <div role="radiogroup" aria-label="Formato de saída" className="grid grid-cols-2 gap-2">
           {FORMAT_OPTIONS.map((option) => {
@@ -704,7 +709,7 @@ function OutputTab({
                   <span
                     className={cn(
                       'flex h-7 w-7 items-center justify-center rounded-lg border',
-                      active ? FORMAT_TONE[option.tone] : 'border-white/[0.08] bg-white/[0.03] text-slate-500'
+                      active ? FORMAT_TONE[option.tone] : 'border-white/[0.08] bg-white/[0.03] text-slate-400'
                     )}
                   >
                     <Icon className="h-3.5 w-3.5" />
@@ -735,7 +740,7 @@ function OutputTab({
                     </span>
                   )}
                 </div>
-                <span className="mt-0.5 block text-[11.5px] leading-snug text-slate-500">
+                <span className="mt-0.5 block text-[11.5px] leading-snug text-slate-400">
                   {option.note}
                 </span>
               </button>
@@ -752,7 +757,7 @@ function OutputTab({
           <span
             className={cn(
               'font-mono text-[14px] font-semibold',
-              qualityEnabled ? 'text-amber-300' : 'text-slate-500'
+              qualityEnabled ? 'text-amber-300' : 'text-slate-400'
             )}
           >
             {qualityEnabled ? `${settings.quality}%` : '—'}
@@ -770,7 +775,7 @@ function OutputTab({
           className="range"
           style={{ '--range-progress': `${qualityProgress}%` } as CSSProperties}
         />
-        <p className="mt-0.5 text-[12px] leading-relaxed text-slate-600">
+        <p className="mt-0.5 text-[12px] leading-relaxed text-slate-400">
           {qualityEnabled
             ? 'Valores menores geram arquivos mais leves; 85% mantém texto nítido.'
             : 'PNG e PDF são sem perdas — a compressão não se aplica.'}
@@ -783,7 +788,7 @@ function OutputTab({
             <Tag className="h-3 w-3" />
             Nomenclatura do arquivo
           </label>
-          <span className="text-[11.5px] text-slate-600">tokens dinâmicos</span>
+          <span className="text-[11.5px] text-slate-400">tokens dinâmicos</span>
         </div>
         <input
           ref={namingRef}
@@ -799,11 +804,11 @@ function OutputTab({
           disabled={isRunning}
           placeholder="[ordem]_[url]_[resolucao]"
           spellCheck={false}
-          className="field w-full px-3 py-2 font-mono text-[13px] text-amber-200/90 placeholder:text-slate-600"
+          className="field w-full px-3 py-2 font-mono text-[13px] text-amber-200/90 placeholder:text-slate-400"
         />
 
         <div className="mt-2 flex flex-wrap items-center gap-1">
-          <span className="mr-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-600">
+          <span className="mr-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-400">
             Tokens
           </span>
           {NAMING_TOKENS.map((token) => (
@@ -820,7 +825,7 @@ function OutputTab({
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-1">
-          <span className="mr-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-600">
+          <span className="mr-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-400">
             Modelos
           </span>
           {NAMING_PRESETS.map((preset) => (
@@ -834,7 +839,7 @@ function OutputTab({
                 'rounded border px-1.5 py-0.5 font-mono text-[11px] transition-colors disabled:opacity-50',
                 settings.namingPattern === preset
                   ? 'border-amber-400/30 bg-amber-400/[0.08] text-amber-300'
-                  : 'border-white/[0.08] text-slate-500 hover:text-slate-300'
+                  : 'border-white/[0.08] text-slate-400 hover:text-slate-300'
               )}
             >
               {preset}
@@ -844,11 +849,14 @@ function OutputTab({
 
         <div className="mt-2.5 flex items-center gap-2 overflow-hidden rounded-lg border border-white/[0.06] bg-black/25 px-2.5 py-2">
           <FileCode className="h-3.5 w-3.5 shrink-0 text-amber-400/80" />
-          <span className="mr-1 shrink-0 text-[11.5px] text-slate-500">Prévia</span>
+          <span className="mr-1 shrink-0 text-[11.5px] text-slate-400">Prévia</span>
           <span className="truncate font-mono text-[12px] text-slate-300" title={sampleName}>
             {sampleName}
           </span>
         </div>
+        <p className="mt-2 text-[11.5px] leading-relaxed text-slate-400">
+          O nome final pode ser ajustado em cada captura no canvas, antes do download.
+        </p>
       </div>
     </div>
   );
@@ -924,7 +932,7 @@ function AdvancedTab({
                   'rounded-md py-1 font-mono text-[11.5px] transition-colors',
                   settings.heroWaitMs === option.value
                     ? 'bg-amber-400/15 font-bold text-amber-300'
-                    : 'text-slate-500 hover:text-slate-300'
+                    : 'text-slate-400 hover:text-slate-300'
                 )}
               >
                 {option.label}
@@ -954,7 +962,7 @@ function AdvancedTab({
                   'rounded-md py-1 font-mono text-[11.5px] transition-colors',
                   settings.delayMs === option.value
                     ? 'bg-amber-400/15 font-bold text-amber-300'
-                    : 'text-slate-500 hover:text-slate-300'
+                    : 'text-slate-400 hover:text-slate-300'
                 )}
               >
                 {option.label}
@@ -1002,13 +1010,13 @@ function AdvancedTab({
             {authConfigured ? (
               <span className="chip chip-emerald !py-0 !text-[10.5px]">configurado</span>
             ) : (
-              <span className="text-[11.5px] text-slate-600">opcional</span>
+              <span className="text-[11.5px] text-slate-400">opcional</span>
             )}
           </span>
           {showAuth ? (
-            <ChevronUp className="h-4 w-4 text-slate-500" />
+            <ChevronUp className="h-4 w-4 text-slate-400" />
           ) : (
-            <ChevronDown className="h-4 w-4 text-slate-500" />
+            <ChevronDown className="h-4 w-4 text-slate-400" />
           )}
         </button>
 
@@ -1029,7 +1037,7 @@ function AdvancedTab({
                 rows={3}
                 spellCheck={false}
                 disabled={isRunning}
-                className="field w-full resize-none px-2.5 py-2 font-mono text-[12.5px] leading-relaxed text-slate-200 placeholder:text-slate-600"
+                className="field w-full resize-none px-2.5 py-2 font-mono text-[12.5px] leading-relaxed text-slate-200 placeholder:text-slate-400"
               />
             </div>
             <div>
@@ -1047,10 +1055,10 @@ function AdvancedTab({
                 rows={2}
                 spellCheck={false}
                 disabled={isRunning}
-                className="field w-full resize-none px-2.5 py-2 font-mono text-[12.5px] leading-relaxed text-slate-200 placeholder:text-slate-600"
+                className="field w-full resize-none px-2.5 py-2 font-mono text-[12.5px] leading-relaxed text-slate-200 placeholder:text-slate-400"
               />
             </div>
-            <p className="flex items-start gap-1.5 text-[11.5px] leading-relaxed text-slate-600">
+            <p className="flex items-start gap-1.5 text-[11.5px] leading-relaxed text-slate-400">
               <ShieldCheck className="mt-0.5 h-3 w-3 shrink-0 text-emerald-500/60" />
               Credenciais ficam no navegador e são enviadas apenas ao Chromium local.
             </p>

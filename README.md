@@ -28,9 +28,9 @@
 - **Captura limpa**: supressão de cookies, newsletters, chat widgets e modais de login que cobrem a hero. O CSS de lazy-load é cirúrgico e não revela overlays ocultos.
 - **Acesso ao workspace**: landing page com CTA de entrada, retomada da sessão via `sessionStorage` e saída pelo header.
 - **Autenticação**: headers HTTP e cookies de sessão para capturar áreas logadas e ambientes de staging.
-- **Nomenclatura tokenizada** (`[ordem]`, `[url]`, `[data]`, `[hora]`, `[resolucao]`, `[formato]`) com prévia do nome em tempo real.
-- **Canvas profissional**: artboards com prévia, inspetor de metadados, filtros por falha, densidade de grade, prévia com zoom, navegação por teclado, cópia para clipboard, download individual e ZIP gerado no navegador.
-- **Workspace em canvas**: configuração em sidebar, área central de artboards, inspetor contextual, modo foco (`F`) e drawer de configuração no mobile.
+- **Nomenclatura tokenizada** (`[ordem]`, `[url]`, `[data]`, `[hora]`, `[resolucao]`, `[formato]`) com prévia do nome em tempo real e **renomeação por captura antes do download**.
+- **Canvas profissional**: artboards com prévia, inspetor de metadados, filtros por falha, densidade de grade, prévia com zoom, navegação por teclado, cópia para clipboard, download individual e ZIP gerado no servidor.
+- **Workspace em canvas**: configuração em sidebar, área central de artboards, inspetor contextual persistente a partir de 1280 px (drawer abaixo disso), modo foco (`F`), drawer de configuração no mobile e fila visível com status por URL desde o início do lote.
 - **Painéis retráteis**: configuração e inspetor recolhem para rails com atalhos contextuais; o estado é persistido e há toggles dedicados na topbar.
 - **Persistência local** de configurações e URLs, atalhos de teclado e acessibilidade (foco visível, focus trap, `aria-live` e `prefers-reduced-motion`).
 - **100% local**: nenhuma imagem ou credencial é enviada a serviços externos.
@@ -48,7 +48,7 @@ O acesso é um **gate visual local** (persistido em `sessionStorage`), sem auten
 
 <div align="center">
   <img src="docs/preview.png" alt="Workspace em canvas do Chromium Snapper" width="100%" />
-  <sub>Workspace em canvas: configuração à esquerda e área de artboards ampla; o inspetor aparece em telas ≥ 1536 px.</sub>
+  <sub>Workspace em canvas: configuração à esquerda, área de artboards ampla e inspetor persistente a partir de 1280 px (drawer em telas menores).</sub>
 </div>
 
 <div align="center">
@@ -63,8 +63,8 @@ O acesso é um **gate visual local** (persistido em `sessionStorage`), sem auten
 | UI | React 19, TypeScript, Tailwind CSS 4, Lucide |
 | Captura | Puppeteer + Chromium headless |
 | Servidor | Express 4 + Vite (middleware mode) |
-| Empacotamento | JSZip (client-side) |
-| Tipografia | Plus Jakarta Sans + JetBrains Mono |
+| Empacotamento | JSZip (server-side, sob demanda) |
+| Tipografia | Plus Jakarta Sans + JetBrains Mono (auto-hospedadas) |
 
 ## Começando
 
@@ -108,8 +108,8 @@ npm run start:prod
 
 1. A UI envia as URLs e as configurações para `POST /api/screenshot/stream`.
 2. O servidor abre uma página headless por URL, aplica headers/cookies/tema, aguarda fontes e mídia da hero, remove overlays intrusivos e faz um scroll progressivo com re-medição de altura para disparar lazy loads — inclusive seções que só crescem após o primeiro scroll.
-3. Cada captura é devolvida por SSE como `item_success` (com data URL + preview) ou `item_error`.
-4. A galeria exibe as prévias e o download em ZIP é montado no próprio navegador com JSZip — sem re-renderizar as páginas.
+3. Cada captura é devolvida por SSE como `item_success` (metadados + thumbnail leve + URL do arquivo) ou `item_error`.
+4. A galeria recebe apenas uma thumbnail leve por item. O arquivo completo fica no store do servidor e é buscado sob demanda para prévia, cópia ou download; o ZIP é montado no servidor a partir desses buffers.
 
 ## Arquitetura
 
@@ -174,7 +174,7 @@ Eventos:
 | `start` | Total de URLs, formato e viewport. |
 | `item_start` | Índice e URL em processamento. |
 | `item_step` | Fase atual (`loading`, `hydrating`, `hero_settling`, `texture_stabilizing`, `scrolling`, `decoding`, `settling`, `capturing`). |
-| `item_success` | Metadados, dimensões, duração, estatísticas de imagens, data URL e preview. |
+| `item_success` | Metadados, dimensões, duração, estatísticas de imagens, thumbnail e `fileUrl` do arquivo completo. |
 | `item_error` | URL, mensagem de erro e duração. |
 | `complete` | Fim do lote. |
 | `fatal_error` | Falha que interrompeu o lote. |
@@ -182,7 +182,9 @@ Eventos:
 ### Endpoints auxiliares
 
 - `POST /api/screenshot` — recebe o mesmo payload e devolve um ZIP gerado no servidor (útil para automações).
-- `POST /api/screenshot/pack-zip` — empacota itens `{ fileName, format, dataUrl }` já capturados.
+- `GET /api/captures/:batchId/:itemId` — entrega o arquivo completo sob demanda (`?download=1&name=...` força download com nome customizado).
+- `POST /api/captures/pack-zip` — monta o ZIP no servidor a partir de `{ files: [{ batchId, itemId, fileName }] }`, com nomes únicos.
+- `POST /api/screenshot/pack-zip` — empacota itens `{ fileName, format, dataUrl }` já capturados (compatibilidade).
 
 ### Tokens de nomenclatura
 
@@ -211,7 +213,7 @@ Eventos:
 - Limite de **50 URLs** por lote; viewport entre 320 e 7680 px de largura (altura até 4320 px).
 - Não há proteção SSRF: a ferramenta foi projetada para uso **local/confiável**. Não exponha o servidor publicamente.
 - Headers e cookies ficam no `localStorage` do navegador. Use apenas em máquinas confiáveis.
-- O servidor encerra o navegador e limpa o lote quando o cliente desconecta.
+- O servidor encerra o navegador ao final do lote e mantém as capturas em memória por até 30 minutos para prévia/download; depois elas expiram. O ZIP é gerado no servidor, sem reenviar imagens em base64 para o navegador.
 
 ---
 
