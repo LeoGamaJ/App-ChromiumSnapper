@@ -1007,10 +1007,7 @@ export default function App() {
         canCapture={urls.length > 0 && urls.length <= MAX_URLS}
         isRunning={isRunning}
         isFocusMode={focusMode}
-        isConfigCollapsed={configCollapsed}
-        isInspectorOpen={isWideInspector ? !inspectorCollapsed : inspectorOpen}
-        onToggleConfigCollapsed={() => setConfigCollapsed((previous) => !previous)}
-        onToggleInspector={toggleInspector}
+        isConfigOpen={configOpen}
         onCapture={handleRun}
         onStop={handleStop}
         onShowShortcuts={handleShowShortcuts}
@@ -1115,6 +1112,9 @@ export default function App() {
             onRename={handleRename}
             onAddExamples={handleAddExamples}
             onShowShortcuts={handleShowShortcuts}
+            showInspectorToggle={!focusMode}
+            isInspectorOpen={inspectorOpen}
+            onToggleInspector={toggleInspector}
             zipState={zipState}
           />
         </main>

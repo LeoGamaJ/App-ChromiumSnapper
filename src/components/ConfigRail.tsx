@@ -34,6 +34,8 @@ export function ConfigRail({
         className="btn btn-ghost btn-icon h-8 w-8 text-slate-400 hover:text-white"
         title="Expandir configuração"
         aria-label="Expandir configuração"
+        aria-controls="config-panel"
+        aria-expanded="false"
       >
         <PanelLeftOpen className="h-4 w-4" />
       </button>

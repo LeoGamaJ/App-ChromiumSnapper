@@ -134,8 +134,10 @@ export function Inspector({
               type="button"
               onClick={onCollapse}
               className="btn btn-ghost btn-icon h-7 w-7 text-slate-400 hover:text-white"
-              title="Retrair inspetor"
-              aria-label="Retrair inspetor"
+              title="Recolher inspetor"
+              aria-label="Recolher inspetor"
+              aria-controls="inspector-panel"
+              aria-expanded="true"
             >
               <PanelRightClose className="h-4 w-4" />
             </button>
@@ -782,13 +784,18 @@ export function InspectorRail({
   onExpand: () => void;
 }) {
   return (
-    <aside className="hidden w-[56px] shrink-0 border-l border-white/[0.06] bg-[#080b12] xl:flex">
+    <aside
+      className="hidden w-[56px] shrink-0 border-l border-white/[0.06] bg-[#080b12] xl:flex"
+      aria-label="Inspetor retraído"
+    >
       <button
         type="button"
         onClick={onExpand}
         className="group flex h-full w-full flex-col items-center gap-3 py-3 transition-colors hover:bg-white/[0.02]"
         title="Expandir inspetor"
         aria-label="Expandir inspetor"
+        aria-controls="inspector-panel"
+        aria-expanded="false"
       >
         <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-slate-400 transition-colors group-hover:border-white/[0.16] group-hover:text-white">
           <PanelRightOpen className="h-4 w-4" />

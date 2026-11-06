@@ -281,7 +281,7 @@ A área tracejada de ~780 px centraliza um conteúdo útil, mas os chips "WebP /
 
 ### ~~RESP-01 · Inspetor inacessível abaixo de 1536 px~~ **✅ Concluído**
 
-> **Implementado em 06/11/2026.** O inspetor agora é persistente a partir de **1280 px** (`xl`) e vira **drawer lateral** abaixo disso, com backdrop, `role="dialog"`, `aria-modal`, focus trap, fechamento por Esc e restauração de foco no trigger. O botão da topbar ficou visível em todas as larguras; o drawer abre por teclado, mouse e toque. Testado em 390, 1024, 1440 e 1920 px, sem overflow horizontal. **Pendente:** largura redimensionável e abertura automática ao selecionar card em tablets.
+> **Implementado em 06/11/2026.** O inspetor agora é persistente a partir de **1280 px** (`xl`) e vira **drawer lateral** abaixo disso, com backdrop, `role="dialog"`, `aria-modal`, focus trap, fechamento por Esc e restauração de foco no trigger. O acesso em telas menores foi movido para a toolbar do canvas (botão **Detalhes**); acima de 1280 px cada painel tem seu próprio controle de recolher/expandir. O drawer abre por teclado, mouse e toque. Testado em 390, 1024, 1440 e 1920 px, sem overflow horizontal. **Pendente:** largura redimensionável e abertura automática ao selecionar card em tablets.
 
 **Severidade:** P1 · **Esforço:** M · **Onde (estado anterior):** `App.tsx:805-833`, `TopBar.tsx:116-129`, `Inspector.tsx:654-704`
 

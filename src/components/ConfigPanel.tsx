@@ -137,6 +137,7 @@ export function ConfigPanel({
 
   return (
     <section
+      id="config-panel"
       className="flex h-full min-h-0 flex-col bg-[#080b12]"
       aria-label="Configuração da captura"
     >
@@ -162,8 +163,10 @@ export function ConfigPanel({
                 type="button"
                 onClick={onCollapse}
                 className="btn btn-ghost btn-icon hidden h-7 w-7 text-slate-400 hover:text-slate-200 lg:inline-flex"
-                title="Retrair configuração"
-                aria-label="Retrair configuração"
+                title="Recolher configuração"
+                aria-label="Recolher configuração"
+                aria-controls="config-panel"
+                aria-expanded="true"
               >
                 <PanelLeftClose className="h-4 w-4" />
               </button>

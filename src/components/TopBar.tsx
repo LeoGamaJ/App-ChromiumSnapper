@@ -1,13 +1,8 @@
 import {
   Camera,
-  ChevronRight,
   Focus,
   Keyboard,
   LogOut,
-  PanelLeftClose,
-  PanelLeftOpen,
-  PanelRightClose,
-  PanelRightOpen,
   Play,
   SlidersHorizontal,
   Square,
@@ -19,10 +14,7 @@ interface TopBarProps {
   canCapture: boolean;
   isRunning: boolean;
   isFocusMode: boolean;
-  isConfigCollapsed: boolean;
-  isInspectorOpen: boolean;
-  onToggleConfigCollapsed: () => void;
-  onToggleInspector: () => void;
+  isConfigOpen: boolean;
   onCapture: () => void;
   onStop: () => void;
   onShowShortcuts: () => void;
@@ -36,10 +28,7 @@ export function TopBar({
   canCapture,
   isRunning,
   isFocusMode,
-  isConfigCollapsed,
-  isInspectorOpen,
-  onToggleConfigCollapsed,
-  onToggleInspector,
+  isConfigOpen,
   onCapture,
   onStop,
   onShowShortcuts,
@@ -55,6 +44,8 @@ export function TopBar({
         onClick={onToggleConfig}
         className="btn btn-ghost btn-icon text-slate-400 hover:text-white lg:hidden"
         aria-label="Abrir configuração do lote"
+        aria-controls="config-panel"
+        aria-expanded={isConfigOpen}
         title="Configuração do lote"
       >
         <SlidersHorizontal className="h-4 w-4" />
@@ -70,73 +61,8 @@ export function TopBar({
         </span>
       </div>
 
-      {/* Breadcrumb / mode */}
-      <div className="ml-1 hidden items-center gap-1.5 border-l border-white/[0.08] pl-3 md:flex">
-        <span className="text-[12.5px] font-medium text-slate-400">Workspace</span>
-        <ChevronRight className="h-3 w-3 text-slate-700" />
-        <span className="text-[12.5px] font-semibold text-slate-300">
-          {isFocusMode ? 'Modo foco' : 'Captura em lote'}
-        </span>
-        <span
-          className={cn(
-            'ml-1 flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[11px]',
-            isRunning
-              ? 'border-amber-400/25 bg-amber-400/[0.08] text-amber-300'
-              : 'border-white/[0.08] bg-white/[0.03] text-slate-400'
-          )}
-        >
-          <span
-            className={cn(
-              'h-1.5 w-1.5 rounded-full',
-              isRunning ? 'animate-pulse bg-amber-400' : 'bg-emerald-400/80'
-            )}
-          />
-          {isRunning ? 'executando' : 'local'}
-        </span>
-      </div>
-
       {/* Actions */}
       <div className="ml-auto flex items-center gap-1.5">
-        {!isFocusMode && (
-          <div className="hidden items-center gap-0.5 rounded-lg border border-white/[0.06] bg-white/[0.03] p-0.5 lg:flex">
-            <button
-              type="button"
-              onClick={onToggleConfigCollapsed}
-              aria-pressed={!isConfigCollapsed}
-              className="btn btn-ghost btn-icon h-7 w-7 text-slate-400 hover:text-white"
-              title={isConfigCollapsed ? 'Expandir configuração' : 'Retrair configuração'}
-              aria-label={isConfigCollapsed ? 'Expandir configuração' : 'Retrair configuração'}
-            >
-              {isConfigCollapsed ? (
-                <PanelLeftOpen className="h-[18px] w-[18px]" />
-              ) : (
-                <PanelLeftClose className="h-[18px] w-[18px]" />
-              )}
-            </button>
-          </div>
-        )}
-
-        {!isFocusMode && (
-          <button
-            type="button"
-            onClick={onToggleInspector}
-            aria-pressed={isInspectorOpen}
-            aria-controls="inspector-panel"
-            aria-label={isInspectorOpen ? 'Fechar inspetor' : 'Abrir inspetor'}
-            title={isInspectorOpen ? 'Fechar inspetor' : 'Abrir inspetor'}
-            className={cn(
-              'btn btn-ghost btn-icon h-8 w-8',
-              isInspectorOpen ? 'text-amber-300' : 'text-slate-400 hover:text-white'
-            )}
-          >
-            {isInspectorOpen ? (
-              <PanelRightClose className="h-[18px] w-[18px]" />
-            ) : (
-              <PanelRightOpen className="h-[18px] w-[18px]" />
-            )}
-          </button>
-        )}
-
         <button
           type="button"
           onClick={onShowShortcuts}
@@ -158,6 +84,7 @@ export function TopBar({
               : 'btn-ghost text-slate-400 hover:text-white'
           )}
           title={isFocusMode ? 'Sair do modo foco' : 'Modo foco — ocultar painéis'}
+          aria-label={isFocusMode ? 'Sair do modo foco' : 'Ativar modo foco'}
         >
           <Focus className="h-3.5 w-3.5" />
           <span className="hidden xl:inline">Foco</span>
@@ -186,9 +113,10 @@ export function TopBar({
             isRunning
               ? 'border-rose-400/40 bg-rose-600 text-white hover:bg-rose-500'
               : 'btn-primary',
-            !isFocusMode && !isConfigCollapsed && 'lg:hidden'
+            !isFocusMode && 'lg:hidden'
           )}
           title={isRunning ? 'Interromper captura' : 'Capturar lote (Ctrl + Enter)'}
+          aria-label={isRunning ? 'Interromper captura' : `Capturar ${urlCount} links`}
         >
           {isRunning ? (
             <>
@@ -199,7 +127,7 @@ export function TopBar({
             <>
               <Play className="h-3.5 w-3.5 fill-current" />
               <span className="hidden sm:inline">Capturar</span>
-              <span className="rounded-md bg-black/15 px-1.5 py-0.5 font-mono text-[11.5px] font-bold">
+              <span aria-hidden="true" className="rounded-md bg-black/15 px-1.5 py-0.5 font-mono text-[11.5px] font-bold">
                 {urlCount}
               </span>
             </>

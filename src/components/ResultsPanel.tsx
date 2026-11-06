@@ -16,6 +16,8 @@ import {
   Keyboard,
   Layers,
   Maximize2,
+  PanelRightClose,
+  PanelRightOpen,
   Pencil,
   Plus,
   RefreshCw,
@@ -68,6 +70,9 @@ interface ResultsPanelProps {
   onAddExamples: () => void;
   onRename: (item: CapturedItem) => void;
   onShowShortcuts: () => void;
+  showInspectorToggle: boolean;
+  isInspectorOpen: boolean;
+  onToggleInspector: () => void;
   zipState: {
     active: boolean;
     total: number;
@@ -100,6 +105,9 @@ export function ResultsPanel({
   onAddExamples,
   onRename,
   onShowShortcuts,
+  showInspectorToggle,
+  isInspectorOpen,
+  onToggleInspector,
   zipState,
 }: ResultsPanelProps) {
   const [density, setDensity] = useState<GalleryDensity>('comfortable');
@@ -155,6 +163,28 @@ export function ResultsPanel({
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          {showInspectorToggle && (
+            <button
+              type="button"
+              onClick={onToggleInspector}
+              aria-label={isInspectorOpen ? 'Fechar inspetor' : 'Abrir inspetor'}
+              aria-controls="inspector-panel"
+              aria-expanded={isInspectorOpen}
+              title={isInspectorOpen ? 'Fechar inspetor' : 'Abrir inspetor'}
+              className={cn(
+                'btn btn-ghost btn-sm h-8 gap-1.5 px-2 xl:hidden',
+                isInspectorOpen ? 'text-amber-300' : 'text-slate-400 hover:text-white'
+              )}
+            >
+              {isInspectorOpen ? (
+                <PanelRightClose className="h-[18px] w-[18px]" />
+              ) : (
+                <PanelRightOpen className="h-[18px] w-[18px]" />
+              )}
+              <span className="hidden md:inline">Detalhes</span>
+            </button>
+          )}
+
           {showFilter && (
             <div className="mr-0.5 hidden rounded-lg border border-white/[0.07] bg-black/30 p-0.5 md:flex">
               {(

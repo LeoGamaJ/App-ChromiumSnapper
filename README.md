@@ -31,7 +31,7 @@
 - **Nomenclatura tokenizada** (`[ordem]`, `[url]`, `[data]`, `[hora]`, `[resolucao]`, `[formato]`) com prévia do nome em tempo real e **renomeação por captura antes do download**.
 - **Canvas profissional**: artboards com prévia, inspetor de metadados, filtros por falha, densidade de grade, prévia com zoom, navegação por teclado, cópia para clipboard, download individual e ZIP gerado no servidor.
 - **Workspace em canvas**: configuração em sidebar, área central de artboards, inspetor contextual persistente a partir de 1280 px (drawer abaixo disso), modo foco (`F`), drawer de configuração no mobile e fila visível com status por URL desde o início do lote.
-- **Painéis retráteis**: configuração e inspetor recolhem para rails com atalhos contextuais; o estado é persistido e há toggles dedicados na topbar.
+- **Painéis retráteis**: configuração e inspetor recolhem para rails com atalhos contextuais; o estado é persistido, o recolher/expandir fica no cabeçalho de cada painel e o inspetor em telas menores é aberto pela toolbar do canvas.
 - **Persistência local** de configurações e URLs, atalhos de teclado e acessibilidade (foco visível, focus trap, `aria-live` e `prefers-reduced-motion`).
 - **100% local**: nenhuma imagem ou credencial é enviada a serviços externos.
 
