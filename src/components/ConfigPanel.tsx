@@ -13,6 +13,7 @@ import {
   Link2,
   Monitor,
   Moon,
+  PanelLeftClose,
   Play,
   RotateCcw,
   ShieldCheck,
@@ -22,6 +23,7 @@ import {
   Sun,
   Tag,
   Trash2,
+  X,
 } from 'lucide-react';
 import {
   FORMAT_OPTIONS,
@@ -42,11 +44,11 @@ import {
   type ColorScheme,
   type OutputFormat,
 } from '../lib/snapper';
-import { cn, Kbd, Spinner, Switch } from './ui';
+import { cn, Spinner, Switch } from './ui';
 
-type TabId = 'links' | 'viewport' | 'output' | 'advanced';
+export type TabId = 'links' | 'viewport' | 'output' | 'advanced';
 
-const TABS: Array<{ id: TabId; label: string; icon: typeof Link2 }> = [
+export const CONFIG_TABS: Array<{ id: TabId; label: string; icon: typeof Link2 }> = [
   { id: 'links', label: 'Links', icon: Link2 },
   { id: 'viewport', label: 'Viewport', icon: Monitor },
   { id: 'output', label: 'Saída', icon: FileCode },
@@ -91,9 +93,13 @@ interface ConfigPanelProps {
   onRawUrlsChange: (value: string) => void;
   urls: string[];
   isRunning: boolean;
+  tab: TabId;
+  onTabChange: (tab: TabId) => void;
   onRun: () => void;
   onStop: () => void;
   onReset: () => void;
+  onClose?: () => void;
+  onCollapse?: () => void;
 }
 
 export function ConfigPanel({
@@ -103,11 +109,14 @@ export function ConfigPanel({
   onRawUrlsChange,
   urls,
   isRunning,
+  tab,
+  onTabChange,
   onRun,
   onStop,
   onReset,
+  onClose,
+  onCollapse,
 }: ConfigPanelProps) {
-  const [tab, setTab] = useState<TabId>('links');
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const duplicates = countDuplicates(urls);
   const overLimit = urls.length > MAX_URLS;
@@ -119,48 +128,74 @@ export function ConfigPanel({
     if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
     event.preventDefault();
     const direction = event.key === 'ArrowRight' ? 1 : -1;
-    const nextIndex = (index + direction + TABS.length) % TABS.length;
-    setTab(TABS[nextIndex].id);
+    const nextIndex = (index + direction + CONFIG_TABS.length) % CONFIG_TABS.length;
+    onTabChange(CONFIG_TABS[nextIndex].id);
     tabRefs.current[nextIndex]?.focus();
   };
 
   return (
-    <section className="panel overflow-hidden" aria-label="Configuração da captura">
+    <section
+      className="flex h-full min-h-0 flex-col bg-[#080b12]"
+      aria-label="Configuração da captura"
+    >
       {/* Header */}
-      <div className="panel-header-line px-5 pb-3.5 pt-5">
+      <div className="shrink-0 border-b border-white/[0.06] px-4 pb-3 pt-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <span className="icon-tile icon-tile-accent">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] border border-amber-400/25 bg-gradient-to-b from-amber-400/[0.16] to-amber-400/[0.04] text-amber-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
               <SlidersHorizontal className="h-4 w-4" />
             </span>
-            <div>
-              <h2 className="text-[13.5px] font-bold tracking-[-0.01em] text-white">
-                Configuração
+            <div className="min-w-0">
+              <h2 className="truncate text-[15px] font-bold tracking-[-0.01em] text-white">
+                Configuração do lote
               </h2>
-              <p className="mt-0.5 text-[11px] text-slate-500">
-                Lote, viewport e formato de saída.
+              <p className="mt-0.5 truncate text-[12px] text-slate-500">
+                Fila, viewport e formato de saída.
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onReset}
-            disabled={isRunning}
-            className="btn btn-ghost btn-sm text-slate-500 hover:text-slate-200"
-            title="Restaurar configurações padrão"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Redefinir</span>
-          </button>
+          <div className="flex shrink-0 items-center gap-0.5">
+            {onCollapse && (
+              <button
+                type="button"
+                onClick={onCollapse}
+                className="btn btn-ghost btn-icon hidden h-7 w-7 text-slate-500 hover:text-slate-200 lg:inline-flex"
+                title="Retrair configuração"
+                aria-label="Retrair configuração"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onReset}
+              disabled={isRunning}
+              className="btn btn-ghost btn-icon h-7 w-7 text-slate-500 hover:text-slate-200"
+              title="Restaurar configurações padrão"
+              aria-label="Restaurar configurações padrão"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </button>
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="btn btn-ghost btn-icon h-7 w-7 text-slate-500 hover:text-white lg:hidden"
+                aria-label="Fechar configuração"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Tabs */}
         <div
           role="tablist"
           aria-label="Seções de configuração"
-          className="mt-4 grid grid-cols-4 gap-1 rounded-xl border border-white/[0.06] bg-black/25 p-1"
+          className="mt-3.5 grid grid-cols-4 gap-1 rounded-lg border border-white/[0.06] bg-black/30 p-1"
         >
-          {TABS.map((item, index) => {
+          {CONFIG_TABS.map((item, index) => {
             const Icon = item.icon;
             const active = tab === item.id;
             return (
@@ -175,20 +210,22 @@ export function ConfigPanel({
                 aria-selected={active}
                 aria-controls="config-tabpanel"
                 tabIndex={active ? 0 : -1}
-                onClick={() => setTab(item.id)}
+                onClick={() => onTabChange(item.id)}
                 onKeyDown={(event) => handleTabKeyDown(event, index)}
                 className={cn(
-                  'relative flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[11.5px] font-semibold transition-colors',
+                  'relative flex items-center justify-center gap-1.5 rounded-md px-1.5 py-1.5 text-[12.5px] font-semibold transition-colors',
                   active
                     ? 'bg-white/[0.08] text-white shadow-sm ring-1 ring-white/10'
                     : 'text-slate-500 hover:bg-white/[0.03] hover:text-slate-300'
                 )}
               >
-                <Icon className={cn('h-3.5 w-3.5', active ? 'text-amber-400' : 'text-slate-500')} />
+                <Icon
+                  className={cn('h-3.5 w-3.5', active ? 'text-amber-400' : 'text-slate-500')}
+                />
                 <span>{item.label}</span>
                 {item.id === 'advanced' &&
                   (settings.customHeaders.trim() || settings.customCookies.trim()) && (
-                    <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                    <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-emerald-400" />
                   )}
               </button>
             );
@@ -201,7 +238,7 @@ export function ConfigPanel({
         role="tabpanel"
         id="config-tabpanel"
         aria-labelledby={`config-tab-${tab}`}
-        className="min-h-[398px] px-5 py-4"
+        className="scroll-area min-h-0 flex-1 overflow-y-auto px-4 py-4"
       >
         <div key={tab} className="anim-in">
           {tab === 'links' && (
@@ -230,9 +267,9 @@ export function ConfigPanel({
       </div>
 
       {/* Footer / run bar */}
-      <div className="border-t border-white/[0.06] bg-[#070a11]/60 px-5 py-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-1.5">
+      <div className="shrink-0 border-t border-white/[0.06] bg-[#070a11]/80 px-4 py-3.5">
+        <div className="mb-2.5 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             <span className={cn('chip', canRun ? 'chip-amber' : '')}>
               <Link2 />
               {urls.length} {urls.length === 1 ? 'link' : 'links'}
@@ -241,12 +278,10 @@ export function ConfigPanel({
             <span className="chip font-mono">
               {settings.width}×{settings.height}
             </span>
-            <span className="chip">{settings.fullPage ? 'Full-page' : 'Viewport'}</span>
+            <span className="chip hidden 2xl:inline-flex">
+              {settings.fullPage ? 'Full-page' : 'Viewport'}
+            </span>
           </div>
-          <span className="hidden shrink-0 items-center gap-1 text-slate-600 xl:flex">
-            <Kbd>Ctrl</Kbd>
-            <Kbd>Enter</Kbd>
-          </span>
         </div>
 
         <button
@@ -276,10 +311,6 @@ export function ConfigPanel({
           )}
         </button>
 
-        <p className="mt-2.5 flex items-center justify-center gap-1.5 text-[10.5px] text-slate-600">
-          <ShieldCheck className="h-3 w-3 text-emerald-500/70" />
-          Processamento 100% local e seguro
-        </p>
       </div>
     </section>
   );
@@ -309,7 +340,7 @@ function LinksTab({
           <label htmlFor="url-list" className="label">
             URLs de destino
           </label>
-          <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+          <p className="mt-1 text-[12.5px] leading-relaxed text-slate-500">
             Uma URL por linha — o protocolo é detectado automaticamente.
           </p>
         </div>
@@ -330,9 +361,9 @@ function LinksTab({
           autoCorrect="off"
           disabled={isRunning}
           aria-describedby="url-list-hint"
-          className="field h-[190px] w-full resize-none px-3.5 py-3 font-mono text-[12.5px] leading-[1.85] text-slate-200 placeholder:text-slate-600"
+          className="field h-[190px] w-full resize-none px-3.5 py-3 font-mono text-[14.5px] leading-[1.85] text-slate-200 placeholder:text-slate-600"
         />
-        <div className="pointer-events-none absolute bottom-2.5 right-3 flex items-center gap-1.5 rounded-md bg-[#070b12]/80 px-1.5 py-0.5 font-mono text-[10px] text-slate-600 backdrop-blur">
+        <div className="pointer-events-none absolute bottom-2.5 right-3 flex items-center gap-1.5 rounded-md bg-[#070b12]/80 px-1.5 py-0.5 font-mono text-[11.5px] text-slate-600 backdrop-blur">
           <span className={cn(urls.length > 0 ? 'text-amber-400/90' : '')}>{urls.length}</span>
           <span>linhas</span>
         </div>
@@ -341,7 +372,7 @@ function LinksTab({
       {(duplicates > 0 || overLimit) && (
         <div
           className={cn(
-            'flex items-start justify-between gap-3 rounded-xl border px-3 py-2 text-[11px]',
+            'flex items-start justify-between gap-3 rounded-xl border px-3 py-2 text-[12.5px]',
             overLimit
               ? 'border-rose-400/25 bg-rose-400/[0.06] text-rose-200'
               : 'border-amber-400/20 bg-amber-400/[0.06] text-amber-200'
@@ -368,14 +399,14 @@ function LinksTab({
 
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+          <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-500">
             Presets rápidos
           </span>
           <button
             type="button"
             onClick={() => onRawUrlsChange('')}
             disabled={isRunning || rawUrls.length === 0}
-            className="flex items-center gap-1 text-[11px] font-medium text-slate-500 transition-colors hover:text-rose-300 disabled:opacity-40"
+            className="flex items-center gap-1 text-[12.5px] font-medium text-slate-500 transition-colors hover:text-rose-300 disabled:opacity-40"
           >
             <Trash2 className="h-3 w-3" />
             Limpar lista
@@ -391,7 +422,7 @@ function LinksTab({
                 title={preset.hint}
                 onClick={() => onRawUrlsChange(preset.urls)}
                 disabled={isRunning}
-                className="group inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.02] px-2.5 py-1.5 text-[11px] font-medium text-slate-400 transition-colors hover:border-amber-400/30 hover:bg-amber-400/[0.06] hover:text-amber-200 disabled:opacity-50"
+                className="group inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.02] px-2.5 py-1.5 text-[12.5px] font-medium text-slate-400 transition-colors hover:border-amber-400/30 hover:bg-amber-400/[0.06] hover:text-amber-200 disabled:opacity-50"
               >
                 <Icon className="h-3.5 w-3.5 text-slate-500 transition-colors group-hover:text-amber-400" />
                 {preset.name}
@@ -401,7 +432,7 @@ function LinksTab({
         </div>
       </div>
 
-      <p id="url-list-hint" className="text-[10.5px] leading-relaxed text-slate-600">
+      <p id="url-list-hint" className="text-[12px] leading-relaxed text-slate-600">
         <Code2 className="mr-1 inline h-3 w-3 align-[-2px]" />
         Aceita domínios sem protocolo, rotas internas e parâmetros de query.
       </p>
@@ -439,7 +470,7 @@ function DimensionField({
 
   return (
     <label className="block">
-      <span className="mb-1 block text-[10.5px] font-medium text-slate-500">{label}</span>
+      <span className="mb-1 block text-[12px] font-medium text-slate-500">{label}</span>
       <span className="field flex items-center">
         <input
           type="number"
@@ -460,9 +491,9 @@ function DimensionField({
           min={min}
           max={max}
           disabled={disabled}
-          className="w-full bg-transparent px-2.5 py-2 font-mono text-[12px] text-slate-200 focus:outline-none"
+          className="w-full bg-transparent px-2.5 py-2 font-mono text-[14px] text-slate-200 focus:outline-none"
         />
-        <span className="pr-2.5 font-mono text-[10px] text-slate-600">px</span>
+        <span className="pr-2.5 font-mono text-[11.5px] text-slate-600">px</span>
       </span>
     </label>
   );
@@ -484,14 +515,14 @@ function ViewportTab({
       <div>
         <div className="flex items-center justify-between">
           <span className="label">Resolução emulada</span>
-          <span className="font-mono text-[10.5px] text-slate-500">
+          <span className="font-mono text-[12px] text-slate-500">
             {settings.width} × {settings.height}
           </span>
         </div>
         <div
           role="radiogroup"
           aria-label="Presets de viewport"
-          className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3"
+          className="mt-2 grid grid-cols-2 gap-2"
         >
           {VIEWPORT_PRESETS.map((preset) => {
             const Icon = preset.icon;
@@ -528,10 +559,10 @@ function ViewportTab({
                     {active && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
                   </span>
                 </div>
-                <span className="mt-2 block truncate text-[11.5px] font-semibold text-slate-200">
+                <span className="mt-2 block truncate text-[13px] font-semibold text-slate-200">
                   {preset.name}
                 </span>
-                <span className="mt-0.5 block font-mono text-[9.5px] text-slate-500">
+                <span className="mt-0.5 block font-mono text-[11px] text-slate-500">
                   {preset.desc}
                 </span>
               </button>
@@ -568,7 +599,7 @@ function ViewportTab({
       <div>
         <div className="mb-2 flex items-center justify-between">
           <span className="label">Preferência de tema</span>
-          <span className="text-[10px] text-slate-600">prefers-color-scheme</span>
+          <span className="text-[11.5px] text-slate-600">prefers-color-scheme</span>
         </div>
         <div
           role="radiogroup"
@@ -587,7 +618,7 @@ function ViewportTab({
                 onClick={() => onChange({ colorScheme: option.id })}
                 disabled={isRunning}
                 className={cn(
-                  'flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition-colors',
+                  'flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[12.5px] font-semibold transition-colors',
                   active
                     ? 'bg-white/[0.08] text-white shadow-sm ring-1 ring-white/10'
                     : 'text-slate-500 hover:text-slate-300'
@@ -599,14 +630,14 @@ function ViewportTab({
             );
           })}
         </div>
-        <p className="mt-2 text-[10.5px] leading-relaxed text-slate-600">
+        <p className="mt-2 text-[12px] leading-relaxed text-slate-600">
           Sites com suporte a dark mode são renderizados no tema escolhido.
         </p>
       </div>
 
       <div className="flex items-start gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
-        <p className="text-[10.5px] leading-relaxed text-slate-500">
+        <p className="text-[12px] leading-relaxed text-slate-500">
           A largura define o layout responsivo; a altura é o viewport antes do full-page.
         </p>
       </div>
@@ -652,7 +683,7 @@ function OutputTab({
       <div>
         <div className="mb-2 flex items-center justify-between">
           <span className="label">Formato de saída</span>
-          <span className="text-[10px] text-slate-600">1 arquivo por URL</span>
+          <span className="text-[11.5px] text-slate-600">1 arquivo por URL</span>
         </div>
         <div role="radiogroup" aria-label="Formato de saída" className="grid grid-cols-2 gap-2">
           {FORMAT_OPTIONS.map((option) => {
@@ -690,11 +721,11 @@ function OutputTab({
                   </span>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[12px] font-bold text-slate-100">{option.label}</span>
+                  <span className="text-[14px] font-bold text-slate-100">{option.label}</span>
                   {option.badge && (
                     <span
                       className={cn(
-                        'rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-[0.08em]',
+                        'rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em]',
                         option.badge === 'Vetorial'
                           ? 'bg-rose-400/10 text-rose-300 ring-1 ring-rose-400/20'
                           : 'bg-amber-400/10 text-amber-300 ring-1 ring-amber-400/20'
@@ -704,7 +735,7 @@ function OutputTab({
                     </span>
                   )}
                 </div>
-                <span className="mt-0.5 block text-[10px] leading-snug text-slate-500">
+                <span className="mt-0.5 block text-[11.5px] leading-snug text-slate-500">
                   {option.note}
                 </span>
               </button>
@@ -720,7 +751,7 @@ function OutputTab({
           </label>
           <span
             className={cn(
-              'font-mono text-[12px] font-semibold',
+              'font-mono text-[14px] font-semibold',
               qualityEnabled ? 'text-amber-300' : 'text-slate-500'
             )}
           >
@@ -739,7 +770,7 @@ function OutputTab({
           className="range"
           style={{ '--range-progress': `${qualityProgress}%` } as CSSProperties}
         />
-        <p className="mt-0.5 text-[10.5px] leading-relaxed text-slate-600">
+        <p className="mt-0.5 text-[12px] leading-relaxed text-slate-600">
           {qualityEnabled
             ? 'Valores menores geram arquivos mais leves; 85% mantém texto nítido.'
             : 'PNG e PDF são sem perdas — a compressão não se aplica.'}
@@ -752,7 +783,7 @@ function OutputTab({
             <Tag className="h-3 w-3" />
             Nomenclatura do arquivo
           </label>
-          <span className="text-[10px] text-slate-600">tokens dinâmicos</span>
+          <span className="text-[11.5px] text-slate-600">tokens dinâmicos</span>
         </div>
         <input
           ref={namingRef}
@@ -768,11 +799,11 @@ function OutputTab({
           disabled={isRunning}
           placeholder="[ordem]_[url]_[resolucao]"
           spellCheck={false}
-          className="field w-full px-3 py-2 font-mono text-[11.5px] text-amber-200/90 placeholder:text-slate-600"
+          className="field w-full px-3 py-2 font-mono text-[13px] text-amber-200/90 placeholder:text-slate-600"
         />
 
         <div className="mt-2 flex flex-wrap items-center gap-1">
-          <span className="mr-0.5 text-[9.5px] font-semibold uppercase tracking-[0.1em] text-slate-600">
+          <span className="mr-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-600">
             Tokens
           </span>
           {NAMING_TOKENS.map((token) => (
@@ -781,7 +812,7 @@ function OutputTab({
               type="button"
               onClick={() => insertToken(token)}
               disabled={isRunning}
-              className="rounded border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 font-mono text-[9.5px] text-slate-400 transition-colors hover:border-amber-400/30 hover:text-amber-300 disabled:opacity-50"
+              className="rounded border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 font-mono text-[11px] text-slate-400 transition-colors hover:border-amber-400/30 hover:text-amber-300 disabled:opacity-50"
             >
               {token}
             </button>
@@ -789,7 +820,7 @@ function OutputTab({
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-1">
-          <span className="mr-0.5 text-[9.5px] font-semibold uppercase tracking-[0.1em] text-slate-600">
+          <span className="mr-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-600">
             Modelos
           </span>
           {NAMING_PRESETS.map((preset) => (
@@ -800,7 +831,7 @@ function OutputTab({
               disabled={isRunning}
               title={`Usar ${preset}`}
               className={cn(
-                'rounded border px-1.5 py-0.5 font-mono text-[9.5px] transition-colors disabled:opacity-50',
+                'rounded border px-1.5 py-0.5 font-mono text-[11px] transition-colors disabled:opacity-50',
                 settings.namingPattern === preset
                   ? 'border-amber-400/30 bg-amber-400/[0.08] text-amber-300'
                   : 'border-white/[0.08] text-slate-500 hover:text-slate-300'
@@ -813,8 +844,8 @@ function OutputTab({
 
         <div className="mt-2.5 flex items-center gap-2 overflow-hidden rounded-lg border border-white/[0.06] bg-black/25 px-2.5 py-2">
           <FileCode className="h-3.5 w-3.5 shrink-0 text-amber-400/80" />
-          <span className="mr-1 shrink-0 text-[10px] text-slate-500">Prévia</span>
-          <span className="truncate font-mono text-[10.5px] text-slate-300" title={sampleName}>
+          <span className="mr-1 shrink-0 text-[11.5px] text-slate-500">Prévia</span>
+          <span className="truncate font-mono text-[12px] text-slate-300" title={sampleName}>
             {sampleName}
           </span>
         </div>
@@ -846,7 +877,7 @@ function AdvancedTab({
           <Gauge className="h-3.5 w-3.5 text-amber-400" />
           <span className="label">Comportamento de captura</span>
         </div>
-        <div className="space-y-3 rounded-xl border border-white/[0.06] bg-white/[0.015] p-3">
+        <div className="divide-y divide-white/[0.055] overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.015]">
           <Switch
             checked={settings.fullPage}
             onChange={(checked) => onChange({ fullPage: checked })}
@@ -854,7 +885,6 @@ function AdvancedTab({
             label="Full-page contínuo"
             description="Captura a página inteira, sem quebra de seções."
           />
-          <div className="h-px bg-white/[0.05]" />
           <Switch
             checked={settings.autoScroll}
             onChange={(checked) => onChange({ autoScroll: checked })}
@@ -862,13 +892,12 @@ function AdvancedTab({
             label="Auto-scroll progressivo"
             description="Ativa lazy loads, animações e seções ocultas."
           />
-          <div className="h-px bg-white/[0.05]" />
           <Switch
             checked={settings.hideCookieBanners}
             onChange={(checked) => onChange({ hideCookieBanners: checked })}
             disabled={isRunning}
-            label="Remover banners de cookies"
-            description="Oculta overlays de consentimento (GDPR)."
+            label="Remover banners e pop-ups"
+            description="Oculta cookies, newsletters e modais de login que cobrem o conteúdo."
           />
         </div>
       </div>
@@ -880,7 +909,7 @@ function AdvancedTab({
               <Clock className="h-3 w-3" />
               Pausa hero
             </span>
-            <span className="font-mono text-[10px] text-amber-300">
+            <span className="font-mono text-[11.5px] text-amber-300">
               {(settings.heroWaitMs / 1000).toFixed(1)}s
             </span>
           </div>
@@ -892,7 +921,7 @@ function AdvancedTab({
                 onClick={() => onChange({ heroWaitMs: option.value })}
                 disabled={isRunning}
                 className={cn(
-                  'rounded-md py-1 font-mono text-[10px] transition-colors',
+                  'rounded-md py-1 font-mono text-[11.5px] transition-colors',
                   settings.heroWaitMs === option.value
                     ? 'bg-amber-400/15 font-bold text-amber-300'
                     : 'text-slate-500 hover:text-slate-300'
@@ -910,7 +939,7 @@ function AdvancedTab({
               <Clock className="h-3 w-3" />
               Delay final
             </span>
-            <span className="font-mono text-[10px] text-amber-300">
+            <span className="font-mono text-[11.5px] text-amber-300">
               {(settings.delayMs / 1000).toFixed(1)}s
             </span>
           </div>
@@ -922,7 +951,7 @@ function AdvancedTab({
                 onClick={() => onChange({ delayMs: option.value })}
                 disabled={isRunning}
                 className={cn(
-                  'rounded-md py-1 font-mono text-[10px] transition-colors',
+                  'rounded-md py-1 font-mono text-[11.5px] transition-colors',
                   settings.delayMs === option.value
                     ? 'bg-amber-400/15 font-bold text-amber-300'
                     : 'text-slate-500 hover:text-slate-300'
@@ -940,7 +969,7 @@ function AdvancedTab({
           <Sparkles className="h-3.5 w-3.5 text-amber-400" />
           <span className="label">Texturas & estabilização</span>
         </div>
-        <div className="space-y-3 rounded-xl border border-white/[0.06] bg-white/[0.015] p-3">
+        <div className="divide-y divide-white/[0.055] overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.015]">
           <Switch
             checked={settings.stabilizeTextures}
             onChange={(checked) => onChange({ stabilizeTextures: checked })}
@@ -948,7 +977,6 @@ function AdvancedTab({
             label="Estabilizar texturas e parallax"
             description="Corrige rasgos e repetições de fundos fixos."
           />
-          <div className="h-px bg-white/[0.05]" />
           <Switch
             checked={settings.removeExcessGrain}
             onChange={(checked) => onChange({ removeExcessGrain: checked })}
@@ -968,13 +996,13 @@ function AdvancedTab({
         >
           <span className="flex items-center gap-2">
             <Key className="h-3.5 w-3.5 text-amber-400" />
-            <span className="text-[11.5px] font-semibold text-slate-300">
+            <span className="text-[13px] font-semibold text-slate-300">
               Headers & cookies
             </span>
             {authConfigured ? (
-              <span className="chip chip-emerald !py-0 !text-[9px]">configurado</span>
+              <span className="chip chip-emerald !py-0 !text-[10.5px]">configurado</span>
             ) : (
-              <span className="text-[10px] text-slate-600">opcional</span>
+              <span className="text-[11.5px] text-slate-600">opcional</span>
             )}
           </span>
           {showAuth ? (
@@ -989,7 +1017,7 @@ function AdvancedTab({
             <div>
               <label
                 htmlFor="custom-headers"
-                className="mb-1 block text-[10.5px] font-semibold text-slate-400"
+                className="mb-1 block text-[12px] font-semibold text-slate-400"
               >
                 Headers HTTP · uma linha por header
               </label>
@@ -1001,13 +1029,13 @@ function AdvancedTab({
                 rows={3}
                 spellCheck={false}
                 disabled={isRunning}
-                className="field w-full resize-none px-2.5 py-2 font-mono text-[11px] leading-relaxed text-slate-200 placeholder:text-slate-600"
+                className="field w-full resize-none px-2.5 py-2 font-mono text-[12.5px] leading-relaxed text-slate-200 placeholder:text-slate-600"
               />
             </div>
             <div>
               <label
                 htmlFor="custom-cookies"
-                className="mb-1 block text-[10.5px] font-semibold text-slate-400"
+                className="mb-1 block text-[12px] font-semibold text-slate-400"
               >
                 Cookies de sessão
               </label>
@@ -1019,10 +1047,10 @@ function AdvancedTab({
                 rows={2}
                 spellCheck={false}
                 disabled={isRunning}
-                className="field w-full resize-none px-2.5 py-2 font-mono text-[11px] leading-relaxed text-slate-200 placeholder:text-slate-600"
+                className="field w-full resize-none px-2.5 py-2 font-mono text-[12.5px] leading-relaxed text-slate-200 placeholder:text-slate-600"
               />
             </div>
-            <p className="flex items-start gap-1.5 text-[10px] leading-relaxed text-slate-600">
+            <p className="flex items-start gap-1.5 text-[11.5px] leading-relaxed text-slate-600">
               <ShieldCheck className="mt-0.5 h-3 w-3 shrink-0 text-emerald-500/60" />
               Credenciais ficam no navegador e são enviadas apenas ao Chromium local.
             </p>

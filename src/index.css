@@ -97,6 +97,83 @@
     mask-image: radial-gradient(ellipse 75% 48% at 50% 0%, #000 20%, transparent 78%);
   }
 
+  .workspace-shell {
+    background:
+      radial-gradient(1200px 600px at 55% -10%, rgba(245, 166, 35, 0.045), transparent 60%),
+      #05070c;
+  }
+
+  .landing-dots {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(rgba(148, 163, 184, 0.16) 1px, transparent 1px);
+    background-size: 26px 26px;
+    background-position: -13px -13px;
+    -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.45) 42%, transparent 80%);
+    mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.45) 42%, transparent 80%);
+  }
+
+  .landing-page section[id] {
+    scroll-margin-top: 72px;
+  }
+
+  .landing-cta {
+    background:
+      radial-gradient(620px 260px at 50% -20%, rgba(245, 166, 35, 0.12), transparent 70%),
+      linear-gradient(180deg, #0b1019 0%, #070a11 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.04),
+      0 30px 70px -55px rgba(0, 0, 0, 0.95);
+  }
+
+  /* Infinite canvas surface: dotted board with a soft studio light. */
+  .canvas-board {
+    background-color: #070a11;
+    background-image:
+      radial-gradient(circle at 50% -5%, rgba(245, 166, 35, 0.05), transparent 50%),
+      radial-gradient(circle at 92% 8%, rgba(56, 132, 255, 0.035), transparent 45%),
+      radial-gradient(rgba(148, 163, 184, 0.15) 1px, transparent 1px);
+    background-size:
+      auto,
+      auto,
+      24px 24px;
+    background-position:
+      0 0,
+      0 0,
+      -12px -12px;
+  }
+
+  .artboard {
+    box-shadow:
+      0 18px 40px -28px rgba(0, 0, 0, 0.95),
+      0 2px 8px -4px rgba(0, 0, 0, 0.6),
+      inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  }
+
+  .scroll-area {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.24) transparent;
+    overscroll-behavior: contain;
+  }
+
+  .scroll-area::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+
+  .scroll-area::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.2);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
+  }
+
+  .scroll-area::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.34);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
   .panel {
     position: relative;
     border-radius: 18px;
@@ -149,7 +226,7 @@
   }
 
   .label {
-    font-size: 10.5px;
+    font-size: 12px;
     font-weight: 700;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -160,7 +237,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 10px;
+    font-size: 11.5px;
     font-weight: 700;
     letter-spacing: 0.2em;
     text-transform: uppercase;
@@ -175,7 +252,7 @@
     border: 1px solid rgba(148, 163, 184, 0.14);
     background: rgba(255, 255, 255, 0.03);
     padding: 0.2rem 0.5rem;
-    font-size: 10.5px;
+    font-size: 12px;
     font-weight: 600;
     color: #94a3b8;
     white-space: nowrap;
@@ -219,7 +296,7 @@
     border: 1px solid transparent;
     padding: 0.625rem 0.9375rem;
     font-family: inherit;
-    font-size: 0.8125rem;
+    font-size: 0.9375rem;
     font-weight: 600;
     line-height: 1.1;
     white-space: nowrap;
@@ -292,7 +369,7 @@
   .btn-sm {
     padding: 0.45rem 0.65rem;
     border-radius: 0.6rem;
-    font-size: 0.75rem;
+    font-size: 0.875rem;
   }
 
   .btn-icon {
@@ -356,7 +433,7 @@
     background: rgba(255, 255, 255, 0.04);
     padding: 0.1rem 0.3rem;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11.5px;
     line-height: 1.4;
     color: #94a3b8;
     box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.35);

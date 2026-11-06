@@ -120,7 +120,7 @@ export function PreviewDialog({
         <div className="flex min-w-0 items-center gap-2.5">
           <span
             className={cn(
-              'rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-wide',
+              'rounded border px-1.5 py-0.5 font-mono text-[10.5px] font-bold tracking-wide',
               item.format === 'pdf'
                 ? 'border-rose-400/30 bg-rose-400/10 text-rose-300'
                 : 'border-amber-400/30 bg-amber-400/10 text-amber-300'
@@ -128,10 +128,10 @@ export function PreviewDialog({
           >
             {item.format.toUpperCase()}
           </span>
-          <span className="max-w-[36vw] truncate font-mono text-[11px] text-slate-200" title={item.fileName}>
+          <span className="max-w-[36vw] truncate font-mono text-[12.5px] text-slate-200" title={item.fileName}>
             {item.fileName}
           </span>
-          <span className="hidden items-center gap-2 font-mono text-[10px] text-slate-500 sm:flex">
+          <span className="hidden items-center gap-2 font-mono text-[11.5px] text-slate-500 sm:flex">
             <span className="h-3 w-px bg-white/10" />
             {item.dimensions?.pageWidth} × {item.dimensions?.pageHeight} px
             <span className="text-slate-700">·</span>
@@ -158,7 +158,7 @@ export function PreviewDialog({
             <button
               type="button"
               onClick={() => setZoom('fit')}
-              className="min-w-14 px-1 text-center font-mono text-[10.5px] text-slate-300 transition-colors hover:text-white"
+              className="min-w-14 px-1 text-center font-mono text-[12px] text-slate-300 transition-colors hover:text-white"
               title="Ajustar à tela (0)"
             >
               {displayZoom}
@@ -272,7 +272,7 @@ export function PreviewDialog({
             />
           </div>
           {item.format === 'pdf' && (
-            <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-[10px] text-slate-500">
+            <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-[11.5px] text-slate-500">
               <FileText className="h-3 w-3 text-rose-400/80" />
               Prévia da viewport — o PDF vetorial contínuo é gerado no download.
             </p>
@@ -281,7 +281,7 @@ export function PreviewDialog({
       </div>
 
       {/* Footer */}
-      <div className="flex min-h-10 shrink-0 items-center justify-between gap-3 border-t border-white/[0.06] bg-[#070a11] px-3 text-[10px] text-slate-500 sm:px-5">
+      <div className="flex min-h-10 shrink-0 items-center justify-between gap-3 border-t border-white/[0.06] bg-[#070a11] px-3 text-[11.5px] text-slate-500 sm:px-5">
         <a
           href={hrefOf(item.url)}
           target="_blank"

@@ -5,6 +5,7 @@ import { Kbd } from './ui';
 
 const SHORTCUTS: Array<{ keys: string[]; action: string }> = [
   { keys: ['Ctrl / Cmd', 'Enter'], action: 'Iniciar a captura do lote' },
+  { keys: ['F'], action: 'Alternar modo foco (ocultar painéis)' },
   { keys: ['Esc'], action: 'Fechar a prévia ou este painel' },
   { keys: ['←', '→'], action: 'Navegar entre capturas na prévia' },
   { keys: ['+', '−'], action: 'Aplicar zoom na prévia' },
@@ -58,10 +59,10 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
               <Keyboard className="h-4 w-4" />
             </span>
             <div>
-              <h2 id="shortcuts-title" className="text-[13px] font-bold text-white">
+              <h2 id="shortcuts-title" className="text-[15px] font-bold text-white">
                 Atalhos de teclado
               </h2>
-              <p className="text-[10.5px] text-slate-500">Navegue sem tirar as mãos do teclado.</p>
+              <p className="text-[12px] text-slate-500">Navegue sem tirar as mãos do teclado.</p>
             </div>
           </div>
           <button
@@ -81,7 +82,7 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
               key={shortcut.action}
               className="flex items-center justify-between gap-4 border-b border-white/[0.04] py-2.5 last:border-b-0"
             >
-              <span className="text-[11.5px] text-slate-300">{shortcut.action}</span>
+              <span className="text-[13px] text-slate-300">{shortcut.action}</span>
               <span className="flex shrink-0 items-center gap-1">
                 {shortcut.keys.map((key) => (
                   <Kbd key={key}>{key}</Kbd>
@@ -91,7 +92,7 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
           ))}
         </div>
 
-        <div className="flex items-center gap-1.5 border-t border-white/[0.06] bg-black/20 px-5 py-3 text-[10px] text-slate-600">
+        <div className="flex items-center gap-1.5 border-t border-white/[0.06] bg-black/20 px-5 py-3 text-[11.5px] text-slate-600">
           <Command className="h-3 w-3" />
           No macOS, use <Kbd>Cmd</Kbd> + <Kbd>Enter</Kbd>; no Windows e Linux, <Kbd>Ctrl</Kbd> + <Kbd>Enter</Kbd>.
         </div>

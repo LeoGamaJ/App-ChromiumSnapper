@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import JSZip from 'jszip';
 import { LandingPage } from './components/LandingPage';
-import { ConfigPanel } from './components/ConfigPanel';
+import { ConfigPanel, type TabId } from './components/ConfigPanel';
+import { ConfigRail } from './components/ConfigRail';
 import { PreviewDialog } from './components/PreviewDialog';
 import { ResultsPanel, type GalleryFilter } from './components/ResultsPanel';
 import { ShortcutsDialog } from './components/ShortcutsDialog';
 import { TopBar } from './components/TopBar';
+import { Inspector, InspectorRail } from './components/Inspector';
 import { ToastStack, type ToastItem, type ToastKind } from './components/ui';
 import { usePersistentState } from './hooks/usePersistentState';
+import { useMediaQuery } from './hooks/useMediaQuery';
 import {
   DEFAULT_SETTINGS,
   DEFAULT_URLS,
@@ -104,11 +107,30 @@ export default function App() {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [filter, setFilter] = useState<GalleryFilter>('all');
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [configOpen, setConfigOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
+  const [configTab, setConfigTab] = useState<TabId>('links');
+  const [configCollapsed, setConfigCollapsed] = usePersistentState<boolean>(
+    'snapper.v2.configCollapsed',
+    false
+  );
+  const [inspectorCollapsed, setInspectorCollapsed] = usePersistentState<boolean>(
+    'snapper.v2.inspectorCollapsed',
+    false
+  );
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
   const [zipState, setZipState] = useState({ active: false, done: 0, total: 0 });
   const [clearArmed, setClearArmed] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [view, setView] = useState<'landing' | 'app'>('landing');
+  const [view, setView] = useState<'landing' | 'app'>(() => {
+    try {
+      return window.sessionStorage.getItem('snapper.workspace') === '1' ? 'app' : 'landing';
+    } catch {
+      return 'landing';
+    }
+  });
 
   const runningRef = useRef(false);
   const zipActiveRef = useRef(false);
@@ -178,6 +200,15 @@ export default function App() {
       setPreviewId(null);
     }
   }, [items, previewId]);
+
+  useEffect(() => {
+    if (selectedId && items.some((item) => item.id === selectedId)) return;
+    setSelectedId(items.length > 0 ? items[items.length - 1].id : null);
+  }, [items, selectedId]);
+
+  useEffect(() => {
+    if (isDesktop) setConfigOpen(false);
+  }, [isDesktop]);
 
   useEffect(() => {
     if (items.length === 0) setLastRun(null);
@@ -289,6 +320,7 @@ export default function App() {
           };
           statsRef.current.success += 1;
           setItems((previous) => [...previous, newItem]);
+          setSelectedId(newItem.id);
           setProgress((previous) => ({
             ...previous,
             finished: Number(payload.index) + 1,
@@ -489,6 +521,15 @@ export default function App() {
     [pushToast]
   );
 
+  const handlePreview = useCallback((item: CapturedItem) => {
+    setSelectedId(item.id);
+    setPreviewId(item.id);
+  }, []);
+
+  const handleSelect = useCallback((item: CapturedItem) => {
+    setSelectedId(item.id);
+  }, []);
+
   const handleCopyImage = useCallback(
     async (item: CapturedItem) => {
       if (!item.dataUrl || item.format === 'pdf') return;
@@ -557,6 +598,23 @@ export default function App() {
     setItems((previous) => previous.filter((item) => item.id !== id));
   }, []);
 
+  const enterWorkspace = useCallback(() => {
+    try {
+      window.sessionStorage.setItem('snapper.workspace', '1');
+    } catch {}
+    setView('app');
+    setConfigOpen(false);
+    window.scrollTo(0, 0);
+  }, []);
+
+  const goToLanding = useCallback(() => {
+    try {
+      window.sessionStorage.removeItem('snapper.workspace');
+    } catch {}
+    setView('landing');
+    window.scrollTo(0, 0);
+  }, []);
+
   const handleClear = useCallback(() => {
     if (!clearArmed) {
       setClearArmed(true);
@@ -584,18 +642,33 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (view !== 'app') return;
+      if (view !== 'app' || previewId || shortcutsOpen) return;
+      const target = event.target as HTMLElement | null;
+      const typing =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable;
       const modifier = event.metaKey || event.ctrlKey;
+
       if (modifier && event.key === 'Enter') {
         event.preventDefault();
         if (!runningRef.current && urls.length > 0) {
           void runCapture(urls);
         }
+        return;
+      }
+      if (event.key === 'Escape' && configOpen) {
+        setConfigOpen(false);
+        return;
+      }
+      if (!modifier && !typing && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        setFocusMode((previous) => !previous);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [runCapture, urls, view]);
+  }, [configOpen, previewId, runCapture, shortcutsOpen, urls, view]);
 
   /* --------------------------------- Render --------------------------------- */
 
@@ -610,33 +683,44 @@ export default function App() {
   if (view === 'landing') {
     return (
       <>
-        <LandingPage onLogin={() => setView('app')} />
+        <LandingPage onLogin={enterWorkspace} />
         <ToastStack toasts={toasts} onDismiss={dismissToast} />
       </>
     );
   }
 
   return (
-    <div className="app-bg relative min-h-screen">
-      <div aria-hidden="true" className="grid-overlay" />
+    <div className="workspace-shell relative flex h-dvh flex-col overflow-hidden bg-[#05070c] text-slate-200">
+      <TopBar
+        urlCount={urls.length}
+        canCapture={urls.length > 0 && urls.length <= MAX_URLS}
+        isRunning={isRunning}
+        isFocusMode={focusMode}
+        isConfigCollapsed={configCollapsed}
+        isInspectorCollapsed={inspectorCollapsed}
+        onToggleConfigCollapsed={() => setConfigCollapsed((previous) => !previous)}
+        onToggleInspectorCollapsed={() => setInspectorCollapsed((previous) => !previous)}
+        onCapture={handleRun}
+        onStop={handleStop}
+        onShowShortcuts={() => setShortcutsOpen(true)}
+        onToggleFocus={() => setFocusMode((previous) => !previous)}
+        onToggleConfig={() => setConfigOpen((previous) => !previous)}
+        onNavigateHome={goToLanding}
+      />
 
-      <div className="relative z-10 flex min-h-screen flex-col">
-        <TopBar
-          urlCount={urls.length}
-          canCapture={urls.length > 0 && urls.length <= MAX_URLS}
-          itemCount={items.filter((item) => item.dataUrl && !item.error).length}
-          isRunning={isRunning}
-          isZipping={zipState.active}
-          onCapture={handleRun}
-          onStop={handleStop}
-          onZip={handleZip}
-          onShowShortcuts={() => setShortcutsOpen(true)}
-          onNavigateHome={() => setView('landing')}
-        />
-
-        <main className="mx-auto w-full max-w-[1440px] flex-1 px-5 pb-8 pt-6 lg:px-8">
-          <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12 lg:gap-6">
-            <div className="min-w-0 lg:col-span-5">
+      <div className="relative flex min-h-0 flex-1">
+        {!isDesktop && configOpen && (
+          <>
+            <button
+              type="button"
+              aria-label="Fechar configuração"
+              onClick={() => setConfigOpen(false)}
+              className="fixed inset-0 top-[54px] z-40 bg-black/65 backdrop-blur-[2px]"
+            />
+            <aside
+              className="fixed inset-y-0 left-0 z-50 mt-[54px] flex w-[min(92vw,360px)] flex-col border-r border-white/[0.07] bg-[#080b12] shadow-2xl shadow-black/60"
+              aria-label="Painel de configuração"
+            >
               <ConfigPanel
                 settings={settings}
                 onChange={updateSettings}
@@ -644,46 +728,109 @@ export default function App() {
                 onRawUrlsChange={setRawUrls}
                 urls={urls}
                 isRunning={isRunning}
+                tab={configTab}
+                onTabChange={setConfigTab}
                 onRun={handleRun}
                 onStop={handleStop}
                 onReset={handleResetSettings}
+                onClose={() => setConfigOpen(false)}
               />
-            </div>
+            </aside>
+          </>
+        )}
 
-            <div className="min-w-0 lg:col-span-7">
-              <ResultsPanel
+        {isDesktop && !focusMode && (
+          configCollapsed ? (
+            <ConfigRail
+              activeTab={configTab}
+              urlCount={urls.length}
+              canRun={urls.length > 0 && urls.length <= MAX_URLS}
+              isRunning={isRunning}
+              onTabChange={setConfigTab}
+              onExpand={() => setConfigCollapsed(false)}
+              onRun={handleRun}
+              onStop={handleStop}
+            />
+          ) : (
+            <aside
+              className="flex w-[348px] shrink-0 flex-col border-r border-white/[0.07] bg-[#080b12]"
+              aria-label="Painel de configuração"
+            >
+              <ConfigPanel
+                settings={settings}
+                onChange={updateSettings}
+                rawUrls={rawUrls}
+                onRawUrlsChange={setRawUrls}
+                urls={urls}
+                isRunning={isRunning}
+                tab={configTab}
+                onTabChange={setConfigTab}
+                onRun={handleRun}
+                onStop={handleStop}
+                onReset={handleResetSettings}
+                onCollapse={() => setConfigCollapsed(true)}
+              />
+            </aside>
+          )
+        )}
+
+        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+          <h1 className="sr-only">Workspace de captura em lote</h1>
+          <ResultsPanel
+            items={items}
+            isRunning={isRunning}
+            progress={progress}
+            elapsedMs={elapsedMs}
+            lastRun={lastRun}
+            settings={settings}
+            urlCount={urls.length}
+            filter={filter}
+            selectedId={selectedId}
+            onFilterChange={setFilter}
+            onSelect={handleSelect}
+            onPreview={handlePreview}
+            onDownload={handleDownloadSingle}
+            onCopy={handleCopyImage}
+            onRemove={handleRemove}
+            onRetry={handleRetry}
+            onZip={handleZip}
+            onClear={handleClear}
+            onTrySample={handleTrySample}
+            onShowShortcuts={() => setShortcutsOpen(true)}
+            zipState={zipState}
+            clearArmed={clearArmed}
+          />
+        </main>
+
+        {!focusMode &&
+          (inspectorCollapsed ? (
+            <InspectorRail
+              itemCount={items.length}
+              hasSelection={Boolean(selectedId)}
+              isRunning={isRunning}
+              onExpand={() => setInspectorCollapsed(false)}
+            />
+          ) : (
+            <div className="hidden h-full min-h-0 2xl:flex">
+              <Inspector
                 items={items}
+                selectedId={selectedId}
                 isRunning={isRunning}
                 progress={progress}
                 elapsedMs={elapsedMs}
                 lastRun={lastRun}
                 settings={settings}
                 urlCount={urls.length}
-                filter={filter}
-                onFilterChange={setFilter}
-                onPreview={(item) => setPreviewId(item.id)}
+                onSelect={handleSelect}
+                onPreview={handlePreview}
                 onDownload={handleDownloadSingle}
                 onCopy={handleCopyImage}
                 onRemove={handleRemove}
                 onRetry={handleRetry}
-                onZip={handleZip}
-                onClear={handleClear}
-                onTrySample={handleTrySample}
-                onShowShortcuts={() => setShortcutsOpen(true)}
-                zipState={zipState}
-                clearArmed={clearArmed}
+                onCollapse={() => setInspectorCollapsed(true)}
               />
             </div>
-          </div>
-        </main>
-
-        <footer className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center justify-between gap-2 px-5 pb-6 pt-1 text-[10px] text-slate-600 lg:px-8">
-          <span className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/70" />
-            Processamento local — suas imagens não saem desta máquina.
-          </span>
-          <span className="font-mono">Chromium Snapper · v1.1</span>
-        </footer>
+          ))}
       </div>
 
       {previewItem && (
@@ -691,7 +838,10 @@ export default function App() {
           item={previewItem}
           items={previewableItems}
           onClose={() => setPreviewId(null)}
-          onNavigate={(item) => setPreviewId(item.id)}
+          onNavigate={(item) => {
+            setSelectedId(item.id);
+            setPreviewId(item.id);
+          }}
           onDownload={handleDownloadSingle}
           onCopy={handleCopyImage}
         />

@@ -1,6 +1,6 @@
 {
   "name": "Chromium Snapper",
-  "description": "Suite de captura full-page em lote com Chromium headless, streaming em tempo real, autoscroll progressivo, PDF vetorial e exportação em ZIP.",
+  "description": "Suite de captura full-page em lote com Chromium, streaming em tempo real, autoscroll progressivo, PDF vetorial e exportação em ZIP.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

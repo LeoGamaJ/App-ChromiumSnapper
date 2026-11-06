@@ -199,59 +199,55 @@ function parseCustomCookies(rawCookies: string | undefined, targetUrl: string): 
     .filter(Boolean);
 }
 
-// Injeta CSS global via page.addStyleTag no Puppeteer para forçar visibilidade de elementos ocultos e lazy-loading
+// Injeta apenas as regras necessárias para revelar lazy-loads e animações de
+// entrada. Evitamos forçar visibilidade em TODOS os elementos porque isso
+// revela modais de login/newsletter ocultos e faz o print perder a hero.
 async function injectLazyLoadVisibilityStyles(page: any) {
   try {
     await page.addStyleTag({
       content: `
-        /* 1. Forçar visibilidade e opacidade em todos os elementos estruturais e de conteúdo */
-        body,
-        body *:not(script):not(style):not(link):not(meta) {
-          visibility: visible !important;
-          opacity: 1 !important;
+        html {
+          scroll-behavior: auto !important;
         }
 
-        /* 2. Forçar visibilidade, exibição e reset de altura em elementos e wrappers de lazy-loading */
+        /* Lazy-load libraries e mídias adiadas */
         img[loading="lazy"],
         img[data-src],
-        img[data-lazy],
         img[data-lazy-src],
         img[data-original],
         source[data-srcset],
+        video[data-src],
         .lazy,
         .lazyload,
         .lazyloading,
+        .lazyloaded,
         .lazy-loaded,
-        [class*="lazy"],
-        [class*="skeleton"],
-        .img-wrapper,
-        .image-wrapper,
-        [class*="placeholder"],
-        [class*="img-wrap"] {
+        .swiper-lazy,
+        [data-bg],
+        [data-background] {
           visibility: visible !important;
           opacity: 1 !important;
-          height: auto !important;
-          min-height: 1px !important;
-          max-height: none !important;
         }
 
-        /* 3. Garantir dimensões mínimas para que imagens não fiquem com 0px */
-        img {
-          visibility: visible !important;
-          opacity: 1 !important;
+        .lazy,
+        .lazyload,
+        .lazyloading,
+        .lazyloaded,
+        .lazy-loaded,
+        .swiper-lazy,
+        [data-src] {
           min-height: 1px !important;
         }
 
-        /* 4. Desbloquear contêineres e wrappers que ocultam seções por overflow ou height 0 */
+        /* Desbloquear contêineres que ocultam seções por overflow/altura */
         html,
         body {
           height: auto !important;
           min-height: 100% !important;
           overflow: visible !important;
-          position: static !important;
         }
 
-        /* 5. Prevenir deformação e shearing de texturas e parallax em fullPage */
+        /* Evitar shearing de texturas/parallax no full-page */
         *, *::before, *::after {
           background-attachment: scroll !important;
         }
@@ -260,7 +256,8 @@ async function injectLazyLoadVisibilityStyles(page: any) {
           image-rendering: -webkit-optimize-contrast !important;
         }
 
-        /* 6. Desativar atrasos de animações para renderizar o estado final imediatamente */
+        /* Acelerar o estado final de animações e transições sem forçar
+           visibilidade de overlays ocultos. */
         *, *::before, *::after {
           animation-duration: 0.001s !important;
           animation-delay: 0s !important;
@@ -269,11 +266,29 @@ async function injectLazyLoadVisibilityStyles(page: any) {
           transition-delay: 0s !important;
         }
 
-        /* 7. Forçar exibição de bibliotecas de scroll reveal (AOS, WOW, ScrollTrigger) */
-        [data-aos], .aos-animate, .wow, [data-scroll], .fade-in, .animate-fade-in, [class*="reveal"], [class*="animate"] {
+        /* Acelerar animações de entrada (AOS, WOW, ScrollTrigger, reveal) */
+        [data-aos],
+        .aos-animate,
+        .wow,
+        [data-scroll],
+        [data-animate],
+        .fade-in,
+        .fade-up,
+        .fade-in-up,
+        .animate-in,
+        .animate-fade-in,
+        .reveal,
+        .reveal-up,
+        .reveal-left,
+        .reveal-right,
+        .scroll-reveal,
+        .js-reveal {
           visibility: visible !important;
           opacity: 1 !important;
           transform: none !important;
+          transition: none !important;
+          animation-duration: 0.001s !important;
+          animation-delay: 0s !important;
         }
       `
     });
@@ -457,46 +472,99 @@ async function preparePageDOM(page: any) {
   });
 }
 
-// Progressive Viewport Scroll: scrolls smoothly to trigger IntersectionObservers on all sections
-async function progressiveScrollAndHydrate(page: any, maxScrollTimeMs = 25000) {
+// Progressive scroll with dynamic-height support: lazy sections, virtualized
+// feeds and scroll-triggered reveals can grow the document after we reach the
+// first "bottom", so we wait and resume until the page height stabilizes.
+async function progressiveScrollAndHydrate(page: any, maxScrollTimeMs = 30000) {
   await page.evaluate(async (maxTime: number) => {
-    await new Promise<void>((resolve) => {
-      let currentY = 0;
-      const startTime = Date.now();
-      const viewportHeight = window.innerHeight || 1080;
-      const step = Math.floor(viewportHeight * 0.7);
+    const scroller = document.scrollingElement || document.documentElement;
+    const viewportHeight = window.innerHeight || 1080;
+    const step = Math.max(320, Math.floor(viewportHeight * 0.65));
+    const maxHeight = 50000;
+    const startedAt = Date.now();
 
-      const timer = setInterval(() => {
-        const docHeight = Math.max(
+    document.documentElement.style.setProperty('scroll-behavior', 'auto', 'important');
+
+    let currentY = 0;
+    let stableRounds = 0;
+
+    while (Date.now() - startedAt < maxTime && currentY < maxHeight) {
+      const docHeight = Math.min(
+        Math.max(
           document.body.scrollHeight,
           document.documentElement.scrollHeight,
           document.body.offsetHeight,
           document.documentElement.offsetHeight,
           document.body.clientHeight,
           document.documentElement.clientHeight
+        ),
+        maxHeight
+      );
+      currentY = Math.min(currentY + step, docHeight);
+
+      window.scrollTo(0, currentY);
+      scroller.scrollTop = currentY;
+      window.dispatchEvent(new Event('scroll'));
+      window.dispatchEvent(new Event('resize'));
+
+      await new Promise<void>((resolve) => setTimeout(resolve, 160));
+
+      if (currentY >= docHeight - 2) {
+        // Give late loaders a chance to append content, then re-measure.
+        await new Promise<void>((resolve) => setTimeout(resolve, 800));
+        const newHeight = Math.min(
+          Math.max(
+            document.body.scrollHeight,
+            document.documentElement.scrollHeight,
+            document.body.offsetHeight,
+            document.documentElement.offsetHeight,
+            document.body.clientHeight,
+            document.documentElement.clientHeight
+          ),
+          maxHeight
         );
-
-        currentY += step;
-        window.scrollTo(0, currentY);
-
-        // Dispatch synthetic scroll and resize events for observer listeners
-        window.dispatchEvent(new Event('scroll'));
-        window.dispatchEvent(new Event('resize'));
-
-        // Max safety height of 35000px to prevent infinite feeds while covering long landing pages
-        if (currentY >= docHeight || (Date.now() - startTime) > maxTime || currentY > 35000) {
-          clearInterval(timer);
-          window.scrollTo(0, 0);
-          window.dispatchEvent(new Event('scroll'));
-          // Aguarda 600ms no topo para a barra de navegação e cabeçalho retornarem ao repouso
-          setTimeout(() => {
-            window.scrollTo(0, 0);
-            resolve();
-          }, 600);
+        if (newHeight > docHeight + 8) {
+          stableRounds = 0;
+        } else {
+          stableRounds += 1;
+          if (stableRounds >= 2) break;
         }
-      }, 100);
-    });
+      }
+    }
+
+    // Trigger final lazy loads at the bottom and let them settle.
+    const finalHeight = Math.min(
+      Math.max(
+        document.body.scrollHeight,
+        document.documentElement.scrollHeight,
+        document.body.offsetHeight,
+        document.documentElement.offsetHeight,
+        document.body.clientHeight,
+        document.documentElement.clientHeight
+      ),
+      maxHeight
+    );
+    window.scrollTo(0, finalHeight);
+    scroller.scrollTop = finalHeight;
+    window.dispatchEvent(new Event('scroll'));
+    await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+
+    // Return to the top so fixed headers and hero animations are in rest state.
+    window.scrollTo(0, 0);
+    scroller.scrollTop = 0;
+    window.dispatchEvent(new Event('scroll'));
+    await new Promise<void>((resolve) => setTimeout(resolve, 700));
+    window.scrollTo(0, 0);
   }, maxScrollTimeMs);
+}
+
+// Give the network a moment to finish loading images/fonts triggered by the scroll.
+async function waitForNetworkQuiet(page: any, timeoutMs = 8000) {
+  try {
+    await page.waitForNetworkIdle({ idleTime: 700, timeout: timeoutMs });
+  } catch {
+    // Pages with long-polling/analytics never become fully idle; not fatal.
+  }
 }
 
 // Wait for all images in the document to decode completely
@@ -626,6 +694,146 @@ async function dismissConsentOverlays(page: any) {
           overlay.style.setProperty('visibility', 'hidden', 'important');
         } catch {}
       });
+
+      // Widgets de chat e pop-ups de marketing conhecidos
+      const widgetSelectors = [
+        '#intercom-container',
+        '.intercom-lightweight-app',
+        '.intercom-app',
+        '#drift-widget',
+        '#drift-frame-controller',
+        '[id^="drift-frame"]',
+        '#launcher',
+        '#webWidget',
+        '[id*="zendesk"]',
+        '[class*="chat-widget"]',
+        '[class*="chatbot"]',
+        '[id*="chat-widget"]',
+        '[id*="tidio"]',
+        '[class*="tidio"]',
+        '[id*="crisp"]',
+        '.crisp-client',
+        '#hubspot-messages-iframe-container',
+        '[id*="tawk"]',
+        '[class*="tawk"]',
+        '[id*="olark"]',
+        '[class*="klaviyo-form"]',
+        '.klaviyo-form',
+        '[id*="attentive"]',
+        '[class*="privy"]',
+        '[id*="privy"]',
+        '[id*="omnisend"]',
+        '[class*="omnisend"]',
+        '[id*="mailchimp"]',
+        '[class*="mc-modal"]'
+      ];
+      widgetSelectors.forEach((sel) => {
+        document.querySelectorAll(sel).forEach((el) => {
+          try {
+            (el as HTMLElement).style.setProperty('display', 'none', 'important');
+          } catch {}
+        });
+      });
+
+      const popupText =
+        /newsletter|assine|assinar|inscrev|receba|cupom|desconto|promo|oferta|login|entrar|cadastr|registr|e-mail|email|whatsapp|atendimento|fale (com )?a gente|chat|ganhe|brinde|frete gr[áa]tis|primeira compra|\boff\b/i;
+      const closeText =
+        /^(×|✕|✖|x|fechar|close|dismiss|dispensar|agora n[ãa]o|no thanks|n[ãa]o,? obrigad[oa]|continuar sem|depois)$/i;
+
+      const popupCandidates = Array.from(document.querySelectorAll<HTMLElement>('body *')).filter(
+        (el) => {
+          if (el.closest('header, nav')) return false;
+          const style = window.getComputedStyle(el);
+          if (style.position !== 'fixed' && style.position !== 'absolute') return false;
+          if (style.display === 'none' || style.visibility === 'hidden') return false;
+          if (Number(style.opacity) < 0.05) return false;
+
+          const zIndex = Number.parseInt(style.zIndex, 10);
+          if (Number.isFinite(zIndex) && zIndex < 10) return false;
+
+          const rect = el.getBoundingClientRect();
+          if (rect.width < 200 || rect.height < 100) return false;
+          if (rect.width * rect.height < window.innerWidth * window.innerHeight * 0.03) return false;
+
+          const text = (el.innerText || '').toLowerCase().slice(0, 4000);
+          if (!popupText.test(text)) return false;
+
+          const hasForm = Boolean(
+            el.querySelector('input, textarea, select, form, [contenteditable="true"]')
+          );
+          const isDialog =
+            el.getAttribute('role') === 'dialog' ||
+            el.getAttribute('aria-modal') === 'true' ||
+            /popup|modal|overlay|newsletter|subscribe|login|cadastro/i.test(
+              `${typeof el.className === 'string' ? el.className : ''} ${el.id}`
+            );
+
+          return hasForm || isDialog;
+        }
+      );
+
+      const detectedPopups = popupCandidates.slice(0, 8);
+
+      detectedPopups.forEach((overlay) => {
+        const controls = Array.from(
+          overlay.querySelectorAll<HTMLElement>(
+            'button, a, [role="button"], [aria-label*="close" i], [aria-label*="fechar" i]'
+          )
+        );
+        const closeButton = controls.find((control) => {
+          const label = (control.textContent || '').trim();
+          const aria = control.getAttribute('aria-label') || '';
+          const title = control.getAttribute('title') || '';
+          return (
+            (label.length > 0 && label.length < 60 && closeText.test(label)) ||
+            /close|fechar|dismiss/i.test(`${aria} ${title}`)
+          );
+        });
+
+        if (closeButton) {
+          try {
+            closeButton.click();
+          } catch {}
+        }
+
+        try {
+          overlay.style.setProperty('display', 'none', 'important');
+          overlay.style.setProperty('visibility', 'hidden', 'important');
+          overlay.style.setProperty('pointer-events', 'none', 'important');
+        } catch {}
+      });
+
+      // Alguns frameworks criam o backdrop como elemento irmão do modal.
+      // Se um popup foi detectado, removemos também essas cortinas full-screen.
+      if (detectedPopups.length > 0) {
+        Array.from(document.querySelectorAll<HTMLElement>('body *'))
+          .filter((el) => {
+            if (el.closest('header, nav')) return false;
+            const style = window.getComputedStyle(el);
+            if (style.position !== 'fixed') return false;
+            if (style.display === 'none' || style.visibility === 'hidden') return false;
+            if (Number(style.opacity) < 0.05) return false;
+            const rect = el.getBoundingClientRect();
+            if (rect.width * rect.height < window.innerWidth * window.innerHeight * 0.6) return false;
+            const text = (el.innerText || '').trim();
+            if (text.length > 80) return false;
+            const identity = `${typeof el.className === 'string' ? el.className : ''} ${el.id}`;
+            return /backdrop|overlay|scrim|modal|popup|fade|drawer|sheet|mask/i.test(identity);
+          })
+          .slice(0, 4)
+          .forEach((backdrop) => {
+            try {
+              backdrop.style.setProperty('display', 'none', 'important');
+              backdrop.style.setProperty('visibility', 'hidden', 'important');
+            } catch {}
+          });
+      }
+
+      // Desbloqueia o scroll caso algum modal tenha travado o body.
+      try {
+        document.documentElement.style.setProperty('overflow', 'visible', 'important');
+        document.body.style.setProperty('overflow', 'visible', 'important');
+      } catch {}
     });
 
     // Some CMPs close on Escape instead of exposing an accept button.
@@ -830,11 +1038,14 @@ app.post('/api/screenshot/stream', async (req: Request, res: Response) => {
             step: 'scrolling',
             status: 'Executando scroll progressivo para ativar todas as seções e lazy loads...',
           });
-          await progressiveScrollAndHydrate(page, 20000);
+          await progressiveScrollAndHydrate(page, 30000);
           if (hideCookieBanners) {
             await dismissConsentOverlays(page);
           }
         }
+
+        // Dá tempo para imagens/fontes disparadas pelo scroll terminarem.
+        await waitForNetworkQuiet(page, 8000);
 
         // Ensure all images decode completely
         sendEvent('item_step', {
@@ -842,7 +1053,7 @@ app.post('/api/screenshot/stream', async (req: Request, res: Response) => {
           step: 'decoding',
           status: 'Garantindo decodificação completa de todas as imagens...',
         });
-        const imgStats = await waitForAllImagesDecoded(page, 6000);
+        const imgStats = await waitForAllImagesDecoded(page, 10000);
 
         // Re-estabilizar texturas e visibilidade imediatamente antes do snapshot
         if (stabilizeTextures || removeExcessGrain) {
@@ -1100,13 +1311,14 @@ app.post('/api/screenshot', async (req: Request, res: Response) => {
         }
 
         if (enableAutoScroll) {
-          await progressiveScrollAndHydrate(page, 20000);
+          await progressiveScrollAndHydrate(page, 30000);
           if (hideCookieBanners) {
             await dismissConsentOverlays(page);
           }
         }
 
-        await waitForAllImagesDecoded(page, 6000);
+        await waitForNetworkQuiet(page, 8000);
+        await waitForAllImagesDecoded(page, 10000);
 
         if (stabilizeTextures || removeExcessGrain) {
           await stabilizeBackgroundTextures(page, Boolean(stabilizeTextures), Boolean(removeExcessGrain));

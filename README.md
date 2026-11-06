@@ -1,11 +1,11 @@
 <div align="center">
-  <img src="docs/preview.png" alt="Chromium Snapper — interface de captura em lote" width="100%" />
+  <img src="docs/landing.png" alt="Chromium Snapper — landing page com acesso ao workspace" width="100%" />
 </div>
 
 <h1 align="center">Chromium Snapper</h1>
 
 <p align="center">
-  Suite local de captura <strong>full-page em lote</strong> com Chromium headless,<br />
+  Landing page e workspace para captura <strong>full-page em lote</strong> com Chromium,<br />
   streaming em tempo real, prévia navegável e exportação em ZIP.
 </p>
 
@@ -24,16 +24,36 @@
 - **Captura em lote** de até 50 URLs por execução, com progresso via Server-Sent Events, ETA e interrupção a qualquer momento.
 - **Viewport configurável**: presets Full HD, 4K, laptop, tablet e mobile, além de largura/altura personalizadas e emulação de `prefers-color-scheme`.
 - **Saída flexível**: WebP, PNG, JPG e PDF vetorial contínuo, com controle de compressão para formatos com perda.
-- **Renderização inteligente**: autoscroll progressivo, hidratação de imagens lazy, desbloqueio de overflow, estabilização de texturas/parallax, redução de grain e remoção de banners de consentimento (GDPR/LGPD).
+- **Renderização inteligente**: scroll progressivo com suporte a altura dinâmica, hidratação de imagens lazy, desbloqueio de overflow, estabilização de texturas/parallax e redução de grain.
+- **Captura limpa**: supressão de cookies, newsletters, chat widgets e modais de login que cobrem a hero. O CSS de lazy-load é cirúrgico e não revela overlays ocultos.
+- **Acesso ao workspace**: landing page com CTA de entrada, retomada da sessão via `sessionStorage` e saída pelo header.
 - **Autenticação**: headers HTTP e cookies de sessão para capturar áreas logadas e ambientes de staging.
 - **Nomenclatura tokenizada** (`[ordem]`, `[url]`, `[data]`, `[hora]`, `[resolucao]`, `[formato]`) com prévia do nome em tempo real.
-- **Galeria profissional**: filtros por falha, prévia com zoom, navegação por teclado, cópia para clipboard, download individual e ZIP gerado no navegador.
+- **Canvas profissional**: artboards com prévia, inspetor de metadados, filtros por falha, densidade de grade, prévia com zoom, navegação por teclado, cópia para clipboard, download individual e ZIP gerado no navegador.
+- **Workspace em canvas**: configuração em sidebar, área central de artboards, inspetor contextual, modo foco (`F`) e drawer de configuração no mobile.
+- **Painéis retráteis**: configuração e inspetor recolhem para rails com atalhos contextuais; o estado é persistido e há toggles dedicados na topbar.
 - **Persistência local** de configurações e URLs, atalhos de teclado e acessibilidade (foco visível, focus trap, `aria-live` e `prefers-reduced-motion`).
 - **100% local**: nenhuma imagem ou credencial é enviada a serviços externos.
 
 <div align="center">
-  <img src="docs/gallery.png" alt="Galeria de capturas com prévias, filtros e download em ZIP" width="100%" />
-  <sub>Galeria com capturas reais em 1440×900 — prévias, metadados e exportação em ZIP.</sub>
+  <img src="docs/gallery.png" alt="Canvas de capturas com artboards, inspetor e download em ZIP" width="100%" />
+  <sub>Canvas de capturas — artboards, inspetor de metadados e exportação em ZIP.</sub>
+</div>
+
+## Landing & acesso
+
+A rota inicial apresenta a landing page da suíte. O botão **Entrar** libera o workspace, onde toda a interação de captura acontece; o botão de saída no header retorna à landing.
+
+O acesso é um **gate visual local** (persistido em `sessionStorage`), sem autenticação de servidor. Para um ambiente com autenticação real, conecte seu provedor de identidade à transição de `landing` para `workspace` em [src/App.tsx](src/App.tsx).
+
+<div align="center">
+  <img src="docs/preview.png" alt="Workspace em canvas do Chromium Snapper" width="100%" />
+  <sub>Workspace em canvas: configuração à esquerda e área de artboards ampla; o inspetor aparece em telas ≥ 1536 px.</sub>
+</div>
+
+<div align="center">
+  <img src="docs/panels.png" alt="Painéis laterais retraídos em rails" width="100%" />
+  <sub>Painéis retráteis: configuração e inspetor recolhem para rails com atalhos, ampliando o canvas.</sub>
 </div>
 
 ## Stack
@@ -87,7 +107,7 @@ npm run start:prod
 ## Como funciona
 
 1. A UI envia as URLs e as configurações para `POST /api/screenshot/stream`.
-2. O servidor abre uma página headless por URL, aplica headers/cookies/tema, aguarda fontes e mídia da hero, força o carregamento de imagens e faz o scroll progressivo para disparar lazy loads.
+2. O servidor abre uma página headless por URL, aplica headers/cookies/tema, aguarda fontes e mídia da hero, remove overlays intrusivos e faz um scroll progressivo com re-medição de altura para disparar lazy loads — inclusive seções que só crescem após o primeiro scroll.
 3. Cada captura é devolvida por SSE como `item_success` (com data URL + preview) ou `item_error`.
 4. A galeria exibe as prévias e o download em ZIP é montado no próprio navegador com JSZip — sem re-renderizar as páginas.
 
@@ -98,7 +118,7 @@ npm run start:prod
 ├── server.ts                  # Express, SSE de captura, pipeline do Chromium, ZIP server-side
 ├── index.html                 # Shell, metadados, fontes e favicon
 ├── src/
-│   ├── App.tsx                # Estado global, streaming SSE, ZIP, atalhos e persistência
+│   ├── App.tsx                # Roteamento landing/workspace, streaming SSE, ZIP e persistência
 │   ├── index.css              # Design tokens, superfícies, botões, foco e animações
 │   ├── lib/
 │   │   └── snapper.ts         # Tipos, presets, tokens de nomenclatura e utilidades
@@ -106,6 +126,7 @@ npm run start:prod
 │   │   ├── usePersistentState.ts
 │   │   └── useFocusTrap.ts
 │   └── components/
+│       ├── LandingPage.tsx    # Landing inicial com CTAs de acesso
 │       ├── TopBar.tsx
 │       ├── ConfigPanel.tsx    # Abas Links / Viewport / Saída / Avançado
 │       ├── ResultsPanel.tsx   # Status do lote, galeria, filtros e cards

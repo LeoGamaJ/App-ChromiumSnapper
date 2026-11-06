@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   AlertTriangle,
+  Check,
   CheckCircle2,
   CircleSlash,
   Copy,
@@ -8,17 +9,15 @@ import {
   ExternalLink,
   FileArchive,
   FileCode,
-  FileText,
+  Grid2X2,
+  Grid3X3,
   Images,
-  Key,
   Keyboard,
   Layers,
   Maximize2,
-  MoveVertical,
   Play,
   RefreshCw,
   ScanLine,
-  Sparkles,
   Trash2,
   X,
 } from 'lucide-react';
@@ -39,6 +38,7 @@ import {
 import { cn, IconButton, Spinner } from './ui';
 
 export type GalleryFilter = 'all' | 'success' | 'error';
+export type GalleryDensity = 'comfortable' | 'compact';
 
 interface ResultsPanelProps {
   items: CapturedItem[];
@@ -49,7 +49,9 @@ interface ResultsPanelProps {
   settings: CaptureSettings;
   urlCount: number;
   filter: GalleryFilter;
+  selectedId: string | null;
   onFilterChange: (filter: GalleryFilter) => void;
+  onSelect: (item: CapturedItem) => void;
   onPreview: (item: CapturedItem) => void;
   onDownload: (item: CapturedItem) => void;
   onCopy: (item: CapturedItem) => void;
@@ -72,7 +74,9 @@ export function ResultsPanel({
   settings,
   urlCount,
   filter,
+  selectedId,
   onFilterChange,
+  onSelect,
   onPreview,
   onDownload,
   onCopy,
@@ -85,6 +89,8 @@ export function ResultsPanel({
   zipState,
   clearArmed,
 }: ResultsPanelProps) {
+  const [density, setDensity] = useState<GalleryDensity>('comfortable');
+
   const validItems = items.filter((item) => item.dataUrl && !item.error);
   const failedItems = items.filter((item) => Boolean(item.error) || !item.dataUrl);
   const totalBytes = validItems.reduce((sum, item) => sum + (item.byteSize || 0), 0);
@@ -93,7 +99,7 @@ export function ResultsPanel({
   const showFilter = failedItems.length > 0 && validItems.length > 0;
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="flex h-full min-h-0 flex-col bg-[#070a11]">
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {isRunning
           ? `Capturando ${Math.min(progress.finished + 1, progress.total)} de ${progress.total} links.`
@@ -103,174 +109,246 @@ export function ResultsPanel({
               : `Lote finalizado com ${lastRun.success} de ${lastRun.total} capturas.`
             : 'Aguardando capturas.'}
       </p>
-      <StatusCard
-        isRunning={isRunning}
-        progress={progress}
-        elapsedMs={elapsedMs}
-        lastRun={lastRun}
-        settings={settings}
-        urlCount={urlCount}
-        validCount={validItems.length}
-      />
 
-      <section aria-label="Galeria de capturas" className="space-y-3">
-        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-3">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-slate-400">
-              <Layers className="h-3.5 w-3.5" />
+      {/* Canvas toolbar */}
+      <header className="flex h-[54px] shrink-0 items-center gap-2 border-b border-white/[0.06] bg-[#080b12]/90 px-3 backdrop-blur lg:gap-3 lg:px-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-slate-400 sm:flex">
+            <Layers className="h-3.5 w-3.5" />
+          </span>
+          <h2 className="shrink-0 text-[14.5px] font-bold tracking-[-0.01em] text-white">
+            Galeria
+          </h2>
+          <span className="chip">
+            {items.length} {items.length === 1 ? 'captura' : 'capturas'}
+          </span>
+          {validItems.length > 0 && (
+            <span className="hidden items-center gap-1.5 font-mono text-[11.5px] text-slate-500 xl:flex">
+              <span className="h-3 w-px bg-white/10" />
+              {formatBytes(totalBytes)}
             </span>
-            <h2 className="text-[13px] font-bold tracking-[-0.01em] text-white">Galeria</h2>
-            <span className="chip">
-              {items.length} {items.length === 1 ? 'captura' : 'capturas'}
+          )}
+          {failedItems.length > 0 && (
+            <span className="chip chip-rose hidden sm:inline-flex">
+              {failedItems.length} {failedItems.length === 1 ? 'falha' : 'falhas'}
             </span>
-            {validItems.length > 0 && (
-              <span className="hidden items-center gap-1.5 font-mono text-[10px] text-slate-500 sm:flex">
-                <span className="h-3 w-px bg-white/10" />
-                {formatBytes(totalBytes)}
-              </span>
-            )}
-            {failedItems.length > 0 && (
-              <span className="chip chip-rose">
-                {failedItems.length} {failedItems.length === 1 ? 'falha' : 'falhas'}
-              </span>
-            )}
-          </div>
+          )}
+        </div>
+
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          {showFilter && (
+            <div className="mr-0.5 hidden rounded-lg border border-white/[0.07] bg-black/30 p-0.5 md:flex">
+              {(
+                [
+                  { id: 'all' as const, label: 'Todas' },
+                  { id: 'error' as const, label: 'Falhas' },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => onFilterChange(option.id)}
+                  aria-pressed={filter === option.id}
+                  className={cn(
+                    'rounded-md px-2 py-1 text-[12px] font-semibold transition-colors',
+                    filter === option.id
+                      ? 'bg-white/[0.08] text-white'
+                      : 'text-slate-500 hover:text-slate-300'
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {items.length > 0 && (
-            <div className="flex items-center gap-1.5">
-              {showFilter && (
-                <div className="mr-1 flex rounded-lg border border-white/[0.07] bg-black/25 p-0.5">
-                  {(
-                    [
-                      { id: 'all' as const, label: 'Todas' },
-                      { id: 'error' as const, label: 'Falhas' },
-                    ] as const
-                  ).map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => onFilterChange(option.id)}
-                      aria-pressed={filter === option.id}
-                      className={cn(
-                        'rounded-md px-2 py-1 text-[10.5px] font-semibold transition-colors',
-                        filter === option.id
-                          ? 'bg-white/[0.08] text-white'
-                          : 'text-slate-500 hover:text-slate-300'
-                      )}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={onZip}
-                disabled={validItems.length === 0 || zipState.active || isRunning}
-                className="btn btn-primary btn-sm"
-                title="Baixar todas as capturas em um arquivo ZIP"
-              >
-                {zipState.active ? (
-                  <Spinner className="h-3.5 w-3.5" />
-                ) : (
-                  <FileArchive className="h-3.5 w-3.5" />
-                )}
-                <span>
-                  {zipState.active
-                    ? `Compactando ${zipState.done}/${zipState.total}`
-                    : 'Baixar .zip'}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={onClear}
-                disabled={isRunning}
+            <div className="hidden rounded-lg border border-white/[0.07] bg-black/30 p-0.5 lg:flex">
+              <IconButton
+                label="Grade ampla"
+                onClick={() => setDensity('comfortable')}
                 className={cn(
-                  'btn btn-sm',
-                  clearArmed ? 'btn-danger' : 'btn-ghost text-slate-500 hover:text-rose-300'
+                  'h-7 w-7 rounded-md',
+                  density === 'comfortable'
+                    ? 'bg-white/[0.09] text-amber-300'
+                    : 'text-slate-500 hover:text-slate-300'
                 )}
-                title="Limpar galeria"
               >
-                <Trash2 className="h-3.5 w-3.5" />
-                <span className={cn(clearArmed ? 'inline' : 'hidden sm:inline')}>
-                  {clearArmed ? 'Confirmar' : 'Limpar'}
-                </span>
+                <Grid2X2 className="h-4 w-4" />
+              </IconButton>
+              <IconButton
+                label="Grade compacta"
+                onClick={() => setDensity('compact')}
+                className={cn(
+                  'h-7 w-7 rounded-md',
+                  density === 'compact'
+                    ? 'bg-white/[0.09] text-amber-300'
+                    : 'text-slate-500 hover:text-slate-300'
+                )}
+              >
+                <Grid3X3 className="h-4 w-4" />
+              </IconButton>
+            </div>
+          )}
+
+          {items.length > 0 && (
+            <button
+              type="button"
+              onClick={onZip}
+              disabled={validItems.length === 0 || zipState.active || isRunning}
+              className="btn btn-primary btn-sm"
+              title="Baixar todas as capturas em um arquivo ZIP"
+            >
+              {zipState.active ? (
+                <Spinner className="h-3.5 w-3.5" />
+              ) : (
+                <FileArchive className="h-3.5 w-3.5" />
+              )}
+              <span className="hidden sm:inline">
+                {zipState.active
+                  ? `Compactando ${zipState.done}/${zipState.total}`
+                  : 'Baixar .zip'}
+              </span>
+              <span className="font-mono text-[11.5px] font-bold opacity-70">
+                {validItems.length}
+              </span>
+            </button>
+          )}
+
+          {items.length > 0 && (
+            <button
+              type="button"
+              onClick={onClear}
+              disabled={isRunning}
+              className={cn(
+                'btn btn-sm',
+                clearArmed ? 'btn-danger' : 'btn-ghost text-slate-500 hover:text-rose-300'
+              )}
+              title="Limpar galeria"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span className={cn(clearArmed ? 'inline' : 'hidden xl:inline')}>
+                {clearArmed ? 'Confirmar' : 'Limpar'}
+              </span>
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* Canvas */}
+      <div className="canvas-board scroll-area relative min-h-0 flex-1 overflow-y-auto">
+        <div className="relative z-10 mx-auto flex min-h-full w-full max-w-[1680px] flex-col gap-3.5 px-3 py-3.5 lg:px-4">
+          {(isRunning || lastRun) && (
+            <RunStatusBar
+              isRunning={isRunning}
+              progress={progress}
+              elapsedMs={elapsedMs}
+              lastRun={lastRun}
+              settings={settings}
+              validCount={validItems.length}
+            />
+          )}
+
+          {items.length === 0 && !isRunning && (
+            <EmptyCanvas
+              urlCount={urlCount}
+              onTrySample={onTrySample}
+              onShowShortcuts={onShowShortcuts}
+            />
+          )}
+
+          {items.length === 0 && isRunning && <SkeletonCanvas />}
+
+          {items.length > 0 && visibleItems.length === 0 && (
+            <div className="panel mx-auto flex max-w-md flex-col items-center px-6 py-10 text-center">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-slate-500">
+                <Images className="h-4 w-4" />
+              </span>
+              <p className="mt-3 text-[14.5px] font-semibold text-slate-200">
+                Nada neste filtro
+              </p>
+              <p className="mt-1 text-[12.5px] text-slate-500">
+                Ajuste o filtro para revisar as demais capturas.
+              </p>
+              <button
+                type="button"
+                onClick={() => onFilterChange('all')}
+                className="btn btn-secondary btn-sm mt-4"
+              >
+                Ver todas
               </button>
             </div>
           )}
-        </header>
 
-        {items.length === 0 && !isRunning && (
-          <>
-            <EmptyGallery onTrySample={onTrySample} onShowShortcuts={onShowShortcuts} />
-            <EngineCapabilities />
-          </>
-        )}
-
-        {items.length === 0 && isRunning && <SkeletonGallery />}
-
-        {items.length > 0 && visibleItems.length === 0 && (
-          <div className="panel flex flex-col items-center px-6 py-10 text-center">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-slate-500">
-              <Images className="h-4 w-4" />
-            </span>
-            <p className="mt-3 text-[12.5px] font-semibold text-slate-200">
-              Nada neste filtro
-            </p>
-            <p className="mt-1 text-[11px] text-slate-500">
-              Ajuste o filtro para revisar as demais capturas.
-            </p>
-            <button
-              type="button"
-              onClick={() => onFilterChange('all')}
-              className="btn btn-secondary btn-sm mt-4"
+          {visibleItems.length > 0 && (
+            <div
+              className={cn(
+                'grid gap-3.5',
+                density === 'compact'
+                  ? 'grid-cols-[repeat(auto-fill,minmax(250px,1fr))]'
+                  : 'grid-cols-[repeat(auto-fill,minmax(310px,1fr))]'
+              )}
             >
-              Ver todas
-            </button>
-          </div>
-        )}
+              {visibleItems.map((item) => {
+                const isFailed = Boolean(item.error) || !item.dataUrl;
+                return isFailed ? (
+                  <ErrorCard
+                    key={item.id}
+                    item={item}
+                    isRunning={isRunning}
+                    isSelected={selectedId === item.id}
+                    onSelect={onSelect}
+                    onRetry={onRetry}
+                    onRemove={onRemove}
+                  />
+                ) : (
+                  <CaptureCard
+                    key={item.id}
+                    item={item}
+                    isSelected={selectedId === item.id}
+                    onSelect={onSelect}
+                    onPreview={onPreview}
+                    onDownload={onDownload}
+                    onCopy={onCopy}
+                    onRemove={onRemove}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
 
-        {visibleItems.length > 0 && (
-          <div className="grid gap-3 xl:grid-cols-2">
-            {visibleItems.map((item) => {
-              const isFailed = Boolean(item.error) || !item.dataUrl;
-              return isFailed ? (
-                <ErrorCard
-                  key={item.id}
-                  item={item}
-                  isRunning={isRunning}
-                  onRetry={onRetry}
-                  onRemove={onRemove}
-                />
-              ) : (
-                <CaptureCard
-                  key={item.id}
-                  item={item}
-                  onPreview={onPreview}
-                  onDownload={onDownload}
-                  onCopy={onCopy}
-                  onRemove={onRemove}
-                />
-              );
-            })}
-          </div>
-        )}
-      </section>
+      {/* Canvas status bar */}
+      <footer className="flex h-8 shrink-0 items-center justify-between gap-3 border-t border-white/[0.06] bg-[#070a11] px-3 text-[11.5px] text-slate-600 lg:px-4">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400/80" />
+          <span className="truncate">Processamento local — suas imagens não saem da máquina.</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-2.5 font-mono">
+          <span className="hidden sm:inline">{items.length} {items.length === 1 ? 'artboard' : 'artboards'}</span>
+          {validItems.length > 0 && (
+            <>
+              <span className="hidden text-slate-700 sm:inline">·</span>
+              <span>{formatBytes(totalBytes)}</span>
+            </>
+          )}
+          <span className="hidden text-slate-700 md:inline">·</span>
+          <span className="hidden md:inline">Chromium Snapper v1.1</span>
+        </span>
+      </footer>
     </div>
   );
 }
 
-/* ------------------------------- Status card ------------------------------- */
+/* ------------------------------- Status bar ------------------------------- */
 
-function StatusCard({
+function RunStatusBar({
   isRunning,
   progress,
   elapsedMs,
   lastRun,
   settings,
-  urlCount,
   validCount,
 }: {
   isRunning: boolean;
@@ -278,7 +356,6 @@ function StatusCard({
   elapsedMs: number;
   lastRun: LastRun | null;
   settings: CaptureSettings;
-  urlCount: number;
   validCount: number;
 }) {
   if (isRunning) {
@@ -291,135 +368,89 @@ function StatusCard({
     const current = Math.min(progress.finished + 1, progress.total);
 
     return (
-      <div className="panel overflow-hidden border-amber-400/20 px-4 py-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-400/25 bg-amber-400/10">
-              <Spinner className="h-4 w-4 text-amber-400" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-[12.5px] font-semibold text-white">
+      <div className="anim-in relative overflow-hidden rounded-xl border border-amber-400/20 bg-[#0b0f18]/90">
+        <div className="flex items-center gap-3 px-3.5 py-2.5">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-amber-400/25 bg-amber-400/10">
+            <Spinner className="h-3.5 w-3.5 text-amber-400" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="truncate text-[13px] font-semibold text-white">
                 Capturando {current} de {progress.total}
               </p>
-              <p className="mt-0.5 truncate text-[11px] text-slate-400">
-                {progress.statusText || 'Preparando o ambiente de captura...'}
-              </p>
+              <span className="chip chip-amber hidden shrink-0 sm:inline-flex">
+                {stepLabel(progress.step)}
+              </span>
             </div>
+            <p className="mt-0.5 truncate text-[12px] text-slate-500">
+              {progress.statusText || 'Preparando o ambiente de captura...'}
+            </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <span className="chip chip-amber hidden sm:inline-flex">
-              {stepLabel(progress.step)}
-            </span>
-            <span className="font-mono text-[13px] font-semibold tabular-nums text-white">
-              {percent}%
-            </span>
+          <div className="hidden shrink-0 items-center gap-3 font-mono text-[11.5px] text-slate-500 sm:flex">
+            <span>{formatClock(elapsedMs)}</span>
+            {etaMs !== null && <span>~{formatClock(etaMs)} restantes</span>}
+            <span className="text-[15px] font-semibold tabular-nums text-white">{percent}%</span>
           </div>
+          <span className="shrink-0 font-mono text-[14px] font-semibold tabular-nums text-white sm:hidden">
+            {percent}%
+          </span>
         </div>
-
         <div
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={percent}
           aria-label="Progresso do lote"
-          className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.09] ring-1 ring-inset ring-white/[0.04]"
+          className="h-[3px] w-full bg-white/[0.06]"
         >
           <div
-            className="shimmer h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-500 transition-[width] duration-500"
+            className="shimmer h-full bg-gradient-to-r from-amber-500 to-orange-400 transition-[width] duration-500"
             style={{ width: `${Math.max(percent, 2)}%` }}
           />
         </div>
-
-        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 text-[10.5px] text-slate-500">
-          <span className="flex items-center gap-2 font-mono">
-            <span>{formatClock(elapsedMs)} decorridos</span>
-            {etaMs !== null && (
-              <>
-                <span className="text-slate-700">·</span>
-                <span>~{formatClock(etaMs)} restantes</span>
-              </>
-            )}
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="font-mono">
-              {progress.finished}/{progress.total} concluídos
-            </span>
-            <span className="text-slate-700">·</span>
-            <span className="uppercase">{settings.format}</span>
-          </span>
-        </div>
       </div>
     );
   }
 
-  if (lastRun) {
-    const interrupted = lastRun.interrupted;
-    const failed = lastRun.failed;
-    const title = interrupted
-      ? 'Lote interrompido'
-      : failed > 0
-        ? 'Lote finalizado com ocorrências'
-        : 'Lote finalizado com sucesso';
-    const subtitle = interrupted
-      ? `${lastRun.success} capturadas · ${failed} falhas · ${formatClock(lastRun.durationMs)}`
-      : `${lastRun.success} de ${lastRun.total} capturadas · ${formatClock(lastRun.durationMs)}`;
-    const Icon = interrupted ? CircleSlash : failed > 0 ? AlertTriangle : CheckCircle2;
-    const iconTone = interrupted
-      ? 'border-amber-400/20 bg-amber-400/[0.07] text-amber-300'
-      : failed > 0
-        ? 'border-rose-400/20 bg-rose-400/[0.07] text-rose-300'
-        : 'border-emerald-400/20 bg-emerald-400/[0.07] text-emerald-300';
+  if (!lastRun) return null;
 
-    return (
-      <div className="panel flex items-center gap-3 px-4 py-3.5">
-        <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border', iconTone)}>
-          <Icon className="h-4 w-4" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[12.5px] font-semibold text-white">{title}</p>
-          <p className="mt-0.5 truncate text-[11px] text-slate-500">{subtitle}</p>
-        </div>
-        <span
-          className={cn(
-            'chip',
-            interrupted ? 'chip-amber' : failed > 0 ? 'chip-rose' : 'chip-emerald'
-          )}
-        >
-          {interrupted
-            ? 'Interrompido'
-            : failed > 0
-              ? `${failed} ${failed === 1 ? 'falha' : 'falhas'}`
-              : `${validCount} prontas`}
-        </span>
-      </div>
-    );
-  }
+  const interrupted = lastRun.interrupted;
+  const failed = lastRun.failed;
+  const title = interrupted
+    ? 'Lote interrompido'
+    : failed > 0
+      ? 'Lote finalizado com ocorrências'
+      : 'Lote finalizado com sucesso';
+  const subtitle = interrupted
+    ? `${lastRun.success} capturadas · ${failed} falhas · ${formatClock(lastRun.durationMs)}`
+    : `${lastRun.success} de ${lastRun.total} capturadas · ${formatClock(lastRun.durationMs)} · ${settings.format.toUpperCase()}`;
+  const Icon = interrupted ? CircleSlash : failed > 0 ? AlertTriangle : CheckCircle2;
+  const tone = interrupted
+    ? 'border-amber-400/20 bg-amber-400/[0.06] text-amber-300'
+    : failed > 0
+      ? 'border-rose-400/20 bg-rose-400/[0.06] text-rose-300'
+      : 'border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-300';
 
-  const ready = urlCount > 0;
   return (
-    <div className="panel flex items-center gap-3 px-4 py-3.5">
-      <span
-        className={cn(
-          'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border',
-          ready
-            ? 'border-amber-400/20 bg-amber-400/[0.07] text-amber-300'
-            : 'border-white/[0.08] bg-white/[0.03] text-slate-500'
-        )}
-      >
-        <ScanLine className="h-4 w-4" />
+    <div className="anim-in flex items-center gap-3 rounded-xl border border-white/[0.07] bg-[#0b0f18]/90 px-3.5 py-2.5">
+      <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border', tone)}>
+        <Icon className="h-3.5 w-3.5" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-[12.5px] font-semibold text-white">
-          {ready ? 'Pronto para capturar' : 'Aguardando URLs'}
-        </p>
-        <p className="mt-0.5 truncate text-[11px] text-slate-500">
-          {ready
-            ? `${urlCount} ${urlCount === 1 ? 'link na fila' : 'links na fila'} · ${settings.fullPage ? 'full-page' : 'viewport'} · ${settings.width}×${settings.height}`
-            : 'Cole os links na configuração para montar o lote.'}
-        </p>
+        <p className="truncate text-[13px] font-semibold text-white">{title}</p>
+        <p className="mt-0.5 truncate text-[12px] text-slate-500">{subtitle}</p>
       </div>
-      <span className="chip hidden sm:inline-flex">
-        {ready ? 'Sequencial' : 'Ocioso'}
+      <span
+        className={cn(
+          'chip shrink-0',
+          interrupted ? 'chip-amber' : failed > 0 ? 'chip-rose' : 'chip-emerald'
+        )}
+      >
+        {interrupted
+          ? 'Interrompido'
+          : failed > 0
+            ? `${failed} ${failed === 1 ? 'falha' : 'falhas'}`
+            : `${validCount} prontas`}
       </span>
     </div>
   );
@@ -427,165 +458,122 @@ function StatusCard({
 
 /* -------------------------------- Empty state ------------------------------- */
 
-function EmptyGallery({
+function EmptyCanvas({
+  urlCount,
   onTrySample,
   onShowShortcuts,
 }: {
+  urlCount: number;
   onTrySample: () => void;
   onShowShortcuts: () => void;
 }) {
   return (
-    <div className="panel relative overflow-hidden">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 opacity-60"
-        style={{
-          backgroundImage:
-            'radial-gradient(circle at 50% 0%, rgba(245,166,35,0.08), transparent 55%), linear-gradient(rgba(148,163,184,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.035) 1px, transparent 1px)',
-          backgroundSize: 'auto, 40px 40px, 40px 40px',
-          maskImage: 'radial-gradient(ellipse 70% 70% at 50% 30%, #000 20%, transparent 80%)',
-          WebkitMaskImage:
-            'radial-gradient(ellipse 70% 70% at 50% 30%, #000 20%, transparent 80%)',
-        }}
-      />
-      <div className="relative flex flex-col items-center px-6 py-9 text-center">
-        <div className="relative flex h-[72px] w-[72px] items-center justify-center">
+    <div className="flex flex-1 items-center justify-center py-4 sm:py-8">
+      <div className="relative w-full max-w-[780px] rounded-2xl border border-dashed border-white/[0.14] bg-[#080b12]/55 px-6 py-9 text-center backdrop-blur-[2px] sm:px-10 sm:py-12">
+        {/* Corner marks */}
+        {[
+          'left-3 top-3 border-l border-t',
+          'right-3 top-3 border-r border-t',
+          'left-3 bottom-3 border-b border-l',
+          'right-3 bottom-3 border-b border-r',
+        ].map((position) => (
+          <span
+            key={position}
+            aria-hidden="true"
+            className={cn('absolute h-3 w-3 border-white/15', position)}
+          />
+        ))}
+
+        <div className="relative mx-auto flex h-[68px] w-[68px] items-center justify-center">
           <span className="absolute inset-0 rotate-6 rounded-2xl border border-amber-400/15 bg-amber-400/[0.04]" />
           <span className="absolute inset-[7px] -rotate-3 rounded-2xl border border-white/[0.08] bg-white/[0.02]" />
-          <span className="relative flex h-11 w-11 items-center justify-center rounded-xl border border-amber-400/30 bg-gradient-to-br from-amber-400/25 to-orange-500/[0.06] text-amber-300 shadow-[0_0_30px_-6px_rgba(245,166,35,0.55)]">
-            <Images className="h-5 w-5" />
+          <span className="relative flex h-11 w-11 items-center justify-center rounded-xl border border-amber-400/30 bg-gradient-to-br from-amber-400/25 to-orange-500/[0.06] text-amber-300 shadow-[0_0_36px_-8px_rgba(245,166,35,0.6)]">
+            <ScanLine className="h-5 w-5" />
           </span>
         </div>
 
-        <h3 className="mt-4 text-[15px] font-bold tracking-[-0.01em] text-white">
-          Sua galeria começa aqui
+        <h3 className="mt-5 text-[19.5px] font-bold tracking-[-0.02em] text-white">
+          Seu canvas está vazio
         </h3>
-        <p className="mt-1.5 max-w-sm text-[11.5px] leading-relaxed text-slate-500">
-          Cole as URLs, ajuste o viewport e capture. As prévias aparecem aqui prontas
-          para revisar, copiar e baixar em ZIP.
+        <p className="mx-auto mt-2 max-w-md text-[14.5px] leading-relaxed text-slate-500">
+          {urlCount > 0
+            ? `Há ${urlCount} ${urlCount === 1 ? 'link pronto' : 'links prontos'} na fila. Inicie a captura para transformar cada página em um artboard aqui.`
+            : 'Cole as URLs no painel de configuração e inicie o lote. Cada página capturada vira um artboard navegável neste canvas.'}
         </p>
 
-        <div className="mt-5 grid w-full max-w-md grid-cols-3 gap-2">
+        <div className="mx-auto mt-6 grid max-w-md grid-cols-3 gap-2">
           {[
-            { number: '01', label: 'Cole as URLs' },
-            { number: '02', label: 'Ajuste a captura' },
-            { number: '03', label: 'Baixe em .zip' },
+            { number: '01', label: 'Cole as URLs', hint: 'até 50 por lote' },
+            { number: '02', label: 'Ajuste a captura', hint: 'viewport e saída' },
+            { number: '03', label: 'Revise no canvas', hint: 'ZIP ou arquivo único' },
           ].map((step) => (
             <div
               key={step.number}
-              className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-2.5 py-2 text-left"
+              className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-2 text-left"
             >
-              <span className="font-mono text-[9.5px] font-semibold text-amber-400/80">
+              <span className="font-mono text-[10.5px] font-semibold text-amber-400/80">
                 {step.number}
               </span>
-              <p className="mt-0.5 text-[10.5px] font-semibold leading-tight text-slate-300">
+              <p className="mt-0.5 text-[12px] font-semibold leading-tight text-slate-300">
                 {step.label}
               </p>
+              <p className="mt-0.5 text-[10.5px] leading-tight text-slate-600">{step.hint}</p>
             </div>
           ))}
         </div>
 
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={onTrySample}
-            className="btn btn-secondary btn-sm"
-          >
-            <Play className="h-3.5 w-3.5 fill-current text-amber-400" />
+          <button type="button" onClick={onTrySample} className="btn btn-primary btn-sm">
+            <Play className="h-3.5 w-3.5 fill-current" />
             Capturar links de exemplo
           </button>
           <button
             type="button"
             onClick={onShowShortcuts}
-            className="btn btn-ghost btn-sm text-slate-500"
+            className="btn btn-secondary btn-sm"
           >
-            <Keyboard className="h-3.5 w-3.5" />
+            <Keyboard className="h-3.5 w-3.5 text-slate-400" />
             Atalhos
           </button>
         </div>
 
         <div className="mt-6 flex flex-wrap items-center justify-center gap-1.5">
-          <span className="text-[9.5px] uppercase tracking-[0.14em] text-slate-600">
+          <span className="text-[10.5px] uppercase tracking-[0.14em] text-slate-600">
             Formatos
           </span>
           {['WebP', 'PDF', 'PNG', 'JPG'].map((format) => (
             <span
               key={format}
-              className="rounded border border-white/[0.07] bg-white/[0.02] px-1.5 py-0.5 font-mono text-[9px] text-slate-500"
+              className="rounded border border-white/[0.07] bg-white/[0.02] px-1.5 py-0.5 font-mono text-[10.5px] text-slate-500"
             >
               {format}
             </span>
           ))}
+          <span className="mx-1 hidden h-3 w-px bg-white/10 sm:block" />
+          <span className="flex items-center gap-1 font-mono text-[10.5px] text-slate-600">
+            <Keyboard className="h-2.5 w-2.5" /> Ctrl + Enter
+          </span>
         </div>
       </div>
     </div>
   );
 }
 
-function EngineCapabilities() {
-  const features = [
-    {
-      icon: MoveVertical,
-      title: 'Auto-scroll progressivo',
-      description: 'Ativa lazy loads e revela todas as seções antes do disparo.',
-    },
-    {
-      icon: Sparkles,
-      title: 'Texturas estabilizadas',
-      description: 'Corrige parallax, grain e repetições em páginas longas.',
-    },
-    {
-      icon: FileText,
-      title: 'PDF vetorial contínuo',
-      description: 'Documento de página única gerado direto do Chromium.',
-    },
-    {
-      icon: Key,
-      title: 'Auth, headers e cookies',
-      description: 'Capture áreas logadas e ambientes de staging.',
-    },
-  ];
-
+function SkeletonCanvas() {
   return (
-    <div className="mt-3 hidden sm:block">
-      <div className="mb-2 flex items-center gap-2">
-        <span className="text-[9.5px] font-semibold uppercase tracking-[0.16em] text-slate-600">
-          Motor de captura
-        </span>
-        <span className="h-px flex-1 bg-white/[0.05]" />
-        <span className="font-mono text-[9px] text-slate-700">4 recursos ativos</span>
-      </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {features.map((feature) => {
-          const Icon = feature.icon;
-          return (
-            <div
-              key={feature.title}
-              className="flex items-start gap-2.5 rounded-xl border border-white/[0.055] bg-white/[0.015] px-3 py-2.5"
-            >
-              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-amber-400/15 bg-amber-400/[0.06] text-amber-400/90">
-                <Icon className="h-3 w-3" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-[10.5px] font-semibold text-slate-300">{feature.title}</p>
-                <p className="mt-0.5 text-[9.5px] leading-snug text-slate-600">
-                  {feature.description}
-                </p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function SkeletonGallery() {
-  return (
-    <div className="grid gap-3 xl:grid-cols-2" aria-hidden="true">
-      {[0, 1].map((index) => (
-        <div key={index} className="panel overflow-hidden">
-          <div className="h-[148px] animate-pulse bg-white/[0.03]" />
+    <div className="grid gap-3.5 grid-cols-[repeat(auto-fill,minmax(310px,1fr))]" aria-hidden="true">
+      {[0, 1, 2].map((index) => (
+        <div
+          key={index}
+          className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#0a0e16]"
+        >
+          <div className="flex h-7 items-center gap-1.5 border-b border-white/[0.05] bg-[#0c1119] px-2.5">
+            {[0, 1, 2].map((dot) => (
+              <span key={dot} className="h-1.5 w-1.5 rounded-full bg-white/[0.08]" />
+            ))}
+            <span className="ml-1 h-2 w-1/3 animate-pulse rounded bg-white/[0.05]" />
+          </div>
+          <div className="aspect-[16/10] animate-pulse bg-white/[0.03]" />
           <div className="space-y-2 p-3.5">
             <div className="h-3 w-1/2 animate-pulse rounded bg-white/[0.05]" />
             <div className="h-2.5 w-2/3 animate-pulse rounded bg-white/[0.035]" />
@@ -601,73 +589,101 @@ function SkeletonGallery() {
 
 function CaptureCard({
   item,
+  isSelected,
+  onSelect,
   onPreview,
   onDownload,
   onCopy,
   onRemove,
 }: {
   item: CapturedItem;
+  isSelected: boolean;
+  onSelect: (item: CapturedItem) => void;
   onPreview: (item: CapturedItem) => void;
   onDownload: (item: CapturedItem) => void;
   onCopy: (item: CapturedItem) => void;
   onRemove: (id: string) => void;
 }) {
   return (
-    <article className="panel group overflow-hidden transition-[border-color,box-shadow] duration-200 hover:border-white/[0.16]">
-      <div className="relative">
+    <article
+      className={cn(
+        'artboard group flex flex-col overflow-hidden rounded-xl border bg-[#0a0e16] transition-[border-color,box-shadow,transform] duration-200',
+        isSelected
+          ? 'border-amber-400/55 shadow-[0_0_0_1px_rgba(245,166,35,0.25),0_22px_48px_-28px_rgba(0,0,0,0.95)]'
+          : 'border-white/[0.08] hover:-translate-y-0.5 hover:border-white/[0.16]'
+      )}
+    >
+      {/* Browser chrome */}
+      <div className="flex h-7 shrink-0 items-center gap-1.5 border-b border-white/[0.05] bg-[#0c1119] px-2.5">
+        <span className="h-1.5 w-1.5 rounded-full bg-rose-400/45" />
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-400/45" />
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/40" />
+        <span
+          className="ml-1.5 min-w-0 flex-1 truncate font-mono text-[11px] text-slate-500"
+          title={item.fileName}
+        >
+          {item.fileName}
+        </span>
+        <span className="hidden shrink-0 font-mono text-[11px] text-slate-600 group-hover:hidden sm:inline">
+          {item.capturedAt}
+        </span>
         <button
           type="button"
-          onClick={() => onPreview(item)}
-          aria-label={`Ampliar captura de ${hostOf(item.url)}`}
-          className="relative block h-[148px] w-full overflow-hidden bg-[#060910] text-left"
+          onClick={() => onRemove(item.id)}
+          aria-label={`Remover captura de ${hostOf(item.url)}`}
+          title="Remover captura"
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-500 opacity-100 transition-colors hover:bg-rose-400/10 hover:text-rose-300 sm:opacity-0 sm:group-hover:opacity-100"
         >
-          <Thumbnail item={item} />
-          <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#080c13] via-transparent to-transparent opacity-80" />
-          <span className="absolute left-2.5 top-2.5">
-            <FormatBadge format={item.format} />
-          </span>
-          <span className="absolute right-2.5 top-2.5 rounded-md border border-white/[0.08] bg-black/55 px-1.5 py-0.5 font-mono text-[9.5px] text-slate-300 backdrop-blur">
-            {item.capturedAt}
-          </span>
-          <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-            <span className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-black/60 px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-lg backdrop-blur">
-              <Maximize2 className="h-3.5 w-3.5 text-amber-400" />
-              Ampliar
-            </span>
-          </span>
+          <X className="h-3 w-3" />
         </button>
       </div>
 
-      <div className="p-3.5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <a
-              href={hrefOf(item.url)}
-              target="_blank"
-              rel="noreferrer"
-              className="group/link flex items-center gap-1.5 text-[12.5px] font-bold text-slate-100 transition-colors hover:text-amber-300"
-              title={item.url}
-            >
-              <span className="truncate">
-                {hostOf(item.url)}
-                <span className="text-slate-500">{pathOf(item.url)}</span>
-              </span>
-              <ExternalLink className="h-3 w-3 shrink-0 text-slate-600 transition-colors group-hover/link:text-amber-400" />
-            </a>
-            <p className="mt-0.5 truncate font-mono text-[9.5px] text-slate-600" title={item.url}>
-              {item.url}
-            </p>
-          </div>
-          <IconButton
-            label={`Remover captura de ${hostOf(item.url)}`}
-            onClick={() => onRemove(item.id)}
-            className="-mr-1 -mt-1 h-6 w-6 shrink-0 text-slate-600 hover:text-rose-300"
+      {/* Artboard preview */}
+      <button
+        type="button"
+        onClick={() => onSelect(item)}
+        onDoubleClick={() => onPreview(item)}
+        aria-label={`Selecionar captura de ${hostOf(item.url)}. Duplo clique para ampliar.`}
+        aria-pressed={isSelected}
+        className="relative block aspect-[16/10] w-full shrink-0 overflow-hidden bg-[#060910] text-left"
+      >
+        <Thumbnail item={item} />
+        <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#080c13]/85 via-transparent to-transparent opacity-80" />
+        <span className="absolute left-2 top-2">
+          <FormatBadge format={item.format} />
+        </span>
+        {isSelected && (
+          <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-amber-400 text-[#1b1305] shadow-sm">
+            <Check className="h-3 w-3" strokeWidth={3} />
+          </span>
+        )}
+        <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          <span className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-black/65 px-2.5 py-1.5 text-[12px] font-semibold text-white shadow-lg backdrop-blur">
+            <Maximize2 className="h-3 w-3 text-amber-400" />
+            Duplo clique para ampliar
+          </span>
+        </span>
+      </button>
+
+      <div className="flex flex-1 flex-col p-3">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <a
+            href={hrefOf(item.url)}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(event) => event.stopPropagation()}
+            className="group/link flex min-w-0 items-center gap-1.5 text-[14.5px] font-bold text-slate-100 transition-colors hover:text-amber-300"
+            title={item.url}
           >
-            <X className="h-3.5 w-3.5" />
-          </IconButton>
+            <span className="truncate">
+              {hostOf(item.url)}
+              <span className="font-medium text-slate-500">{pathOf(item.url)}</span>
+            </span>
+            <ExternalLink className="h-3 w-3 shrink-0 text-slate-600 transition-colors group-hover/link:text-amber-400" />
+          </a>
         </div>
 
-        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[9.5px] text-slate-500">
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-slate-500">
           <span>
             {item.dimensions?.pageWidth} × {item.dimensions?.pageHeight}
           </span>
@@ -678,19 +694,12 @@ function CaptureCard({
           {item.imgStats && item.imgStats.total > 0 && (
             <>
               <span className="text-slate-700">·</span>
-              <span className="flex items-center gap-1 text-emerald-400/80">
+              <span className="flex items-center gap-1 text-emerald-400/75">
                 <Images className="h-2.5 w-2.5" />
                 {item.imgStats.completed}/{item.imgStats.total}
               </span>
             </>
           )}
-        </div>
-
-        <div className="mt-2 flex items-center gap-1.5 overflow-hidden rounded-md border border-white/[0.05] bg-black/20 px-2 py-1">
-          <FileCode className="h-3 w-3 shrink-0 text-slate-600" />
-          <span className="truncate font-mono text-[9.5px] text-slate-400" title={item.fileName}>
-            {item.fileName}
-          </span>
         </div>
 
         <div className="mt-2.5 flex items-center gap-1.5 border-t border-white/[0.05] pt-2.5">
@@ -730,58 +739,78 @@ function CaptureCard({
 function ErrorCard({
   item,
   isRunning,
+  isSelected,
+  onSelect,
   onRetry,
   onRemove,
 }: {
   item: CapturedItem;
   isRunning: boolean;
+  isSelected: boolean;
+  onSelect: (item: CapturedItem) => void;
   onRetry: (item: CapturedItem) => void;
   onRemove: (id: string) => void;
 }) {
   return (
-    <article className="panel border-rose-500/20 bg-rose-500/[0.025] p-3.5">
-      <div className="flex items-start gap-2.5">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-rose-400/20 bg-rose-400/[0.08] text-rose-300">
-          <AlertTriangle className="h-4 w-4" />
+    <article
+      className={cn(
+        'flex flex-col overflow-hidden rounded-xl border bg-[#0d0b12] transition-colors',
+        isSelected
+          ? 'border-rose-400/45 shadow-[0_0_0_1px_rgba(251,113,133,0.2)]'
+          : 'border-rose-500/20 hover:border-rose-400/35'
+      )}
+    >
+      <div className="flex h-7 items-center gap-1.5 border-b border-rose-400/10 bg-rose-950/20 px-2.5">
+        <span className="h-1.5 w-1.5 rounded-full bg-rose-400/70" />
+        <span className="ml-1 truncate font-mono text-[10.5px] text-rose-200/70">
+          erro de captura
         </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2">
-            <a
-              href={hrefOf(item.url)}
-              target="_blank"
-              rel="noreferrer"
-              className="min-w-0 flex-1 truncate text-[12px] font-semibold text-slate-100 transition-colors hover:text-amber-300"
-              title={item.url}
-            >
+        <span className="ml-auto font-mono text-[10.5px] text-slate-600">{item.capturedAt}</span>
+      </div>
+
+      <div className="flex flex-1 flex-col p-3.5">
+        <div className="flex items-start gap-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-rose-400/20 bg-rose-400/[0.08] text-rose-300">
+            <AlertTriangle className="h-4 w-4" />
+          </span>
+          <button
+            type="button"
+            onClick={() => onSelect(item)}
+            aria-pressed={isSelected}
+            className="min-w-0 flex-1 text-left"
+          >
+            <span className="block truncate text-[14px] font-semibold text-slate-100">
               {hostOf(item.url)}
-              <span className="text-slate-500">{pathOf(item.url)}</span>
-            </a>
-            <span className="shrink-0 font-mono text-[9.5px] text-slate-600">
-              {item.capturedAt}
+              <span className="font-normal text-slate-500">{pathOf(item.url)}</span>
             </span>
-          </div>
-          <p className="mt-1 break-words font-mono text-[10px] leading-relaxed text-rose-300/80">
-            {item.error || 'A página retornou 0 bytes por limites de renderização.'}
-          </p>
-          <div className="mt-2 flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => onRetry(item)}
-              disabled={isRunning}
-              className="btn btn-secondary btn-sm"
-            >
-              <RefreshCw className="h-3 w-3 text-amber-400" />
-              Tentar novamente
-            </button>
-            <button
-              type="button"
-              onClick={() => onRemove(item.id)}
-              className="btn btn-ghost btn-sm text-slate-500 hover:text-rose-300"
-            >
-              <Trash2 className="h-3 w-3" />
-              Remover
-            </button>
-          </div>
+            <span className="mt-0.5 block truncate font-mono text-[11px] text-slate-600">
+              {item.url}
+            </span>
+          </button>
+        </div>
+
+        <p className="mt-2.5 line-clamp-3 break-words rounded-lg border border-rose-400/10 bg-rose-400/[0.04] px-2.5 py-2 font-mono text-[11.5px] leading-relaxed text-rose-300/80">
+          {item.error || 'A página retornou 0 bytes por limites de renderização.'}
+        </p>
+
+        <div className="mt-auto flex items-center gap-1.5 pt-3">
+          <button
+            type="button"
+            onClick={() => onRetry(item)}
+            disabled={isRunning}
+            className="btn btn-secondary btn-sm flex-1"
+          >
+            <RefreshCw className="h-3 w-3 text-amber-400" />
+            Tentar novamente
+          </button>
+          <button
+            type="button"
+            onClick={() => onRemove(item.id)}
+            className="btn btn-ghost btn-sm text-slate-500 hover:text-rose-300"
+          >
+            <Trash2 className="h-3 w-3" />
+            Remover
+          </button>
         </div>
       </div>
     </article>
@@ -796,7 +825,7 @@ function Thumbnail({ item }: { item: CapturedItem }) {
     return (
       <span className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[#070b12] text-slate-600">
         <Images className="h-5 w-5" />
-        <span className="text-[10px]">Prévia indisponível</span>
+        <span className="text-[11.5px]">Prévia indisponível</span>
       </span>
     );
   }
@@ -808,22 +837,22 @@ function Thumbnail({ item }: { item: CapturedItem }) {
       loading="lazy"
       decoding="async"
       onError={() => setFailed(true)}
-      className="h-full w-full object-cover object-top transition-transform duration-500 group-hover:scale-[1.025]"
+      className="h-full w-full object-cover object-top transition-transform duration-500 group-hover:scale-[1.02]"
     />
   );
 }
 
 function FormatBadge({ format }: { format: OutputFormat }) {
   const styles: Record<OutputFormat, string> = {
-    webp: 'border-amber-400/30 bg-amber-950/70 text-amber-300',
-    pdf: 'border-rose-400/30 bg-rose-950/70 text-rose-300',
-    png: 'border-emerald-400/30 bg-emerald-950/70 text-emerald-300',
-    jpg: 'border-slate-400/25 bg-slate-950/70 text-slate-300',
+    webp: 'border-amber-400/30 bg-amber-950/75 text-amber-300',
+    pdf: 'border-rose-400/30 bg-rose-950/75 text-rose-300',
+    png: 'border-emerald-400/30 bg-emerald-950/75 text-emerald-300',
+    jpg: 'border-slate-400/25 bg-slate-950/75 text-slate-300',
   };
   return (
     <span
       className={cn(
-        'rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-wide backdrop-blur',
+        'rounded border px-1.5 py-0.5 font-mono text-[11px] font-bold tracking-wide backdrop-blur',
         styles[format]
       )}
     >

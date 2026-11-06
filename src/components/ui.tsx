@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { AlertTriangle, CheckCircle2, Info, Loader2, X } from 'lucide-react';
 
@@ -41,40 +42,68 @@ interface SwitchProps {
 }
 
 export function Switch({ checked, onChange, label, description, disabled }: SwitchProps) {
+  const descriptionId = useId();
+
   return (
-    <div className={cn('flex items-start justify-between gap-4', disabled && 'opacity-60')}>
-      <div className="min-w-0">
-        <span className="block text-[12.5px] font-semibold leading-snug text-slate-200">
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      aria-describedby={description ? descriptionId : undefined}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cn(
+        'group flex w-full items-start justify-between gap-4 px-3.5 py-3 text-left transition-colors duration-150',
+        'focus-visible:bg-white/[0.035] focus-visible:outline-none',
+        disabled
+          ? 'cursor-not-allowed opacity-50'
+          : 'cursor-pointer hover:bg-white/[0.025]'
+      )}
+    >
+      <span className="min-w-0 flex-1 select-none">
+        <span
+          className={cn(
+            'block text-[14.5px] font-semibold leading-snug transition-colors',
+            checked ? 'text-slate-100' : 'text-slate-200',
+            !disabled && 'group-hover:text-white'
+          )}
+        >
           {label}
         </span>
         {description && (
-          <span className="mt-0.5 block text-[11px] leading-relaxed text-slate-500">
+          <span
+            id={descriptionId}
+            className="mt-1 block text-[12px] leading-[1.55] text-slate-500 transition-colors group-hover:text-slate-400"
+          >
             {description}
           </span>
         )}
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
+      </span>
+
+      {/* Switch track — visual only; the whole row is the control. */}
+      <span
+        aria-hidden="true"
         className={cn(
-          'relative mt-0.5 h-[22px] w-[38px] shrink-0 rounded-full border transition-colors duration-200 before:absolute before:-inset-2 before:rounded-full before:content-[""]',
+          'relative mt-0.5 flex h-5 w-9 shrink-0 items-center rounded-full border px-[2px]',
+          'transition-[background-color,border-color,box-shadow,filter] duration-200 ease-out',
           checked
-            ? 'border-amber-400/50 bg-amber-500/90'
-            : 'border-white/10 bg-white/[0.08] hover:bg-white/[0.12]'
+            ? 'border-amber-300/45 bg-gradient-to-r from-amber-500 to-amber-400 shadow-[inset_0_1px_2px_rgba(120,53,15,0.28),0_0_0_3px_rgba(245,166,35,0.05)]'
+            : 'border-white/[0.12] bg-[#0b0f16] shadow-[inset_0_1px_3px_rgba(0,0,0,0.45)]',
+          !disabled && checked && 'group-hover:brightness-[1.04]',
+          !disabled && !checked && 'group-hover:border-white/[0.22]',
+          'group-focus-visible:ring-2 group-focus-visible:ring-amber-400/45 group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-[#080b12]'
         )}
       >
         <span
           className={cn(
-            'absolute top-[2px] h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200',
-            checked ? 'translate-x-[18px]' : 'translate-x-[2px]'
+            'h-3.5 w-3.5 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.5),0_0_0_0.5px_rgba(0,0,0,0.08)]',
+            'transition-transform duration-200 ease-out',
+            checked ? 'translate-x-[16px]' : 'translate-x-0'
           )}
         />
-      </button>
-    </div>
+      </span>
+    </button>
   );
 }
 
@@ -112,7 +141,7 @@ export function ToastStack({
           <div
             key={toast.id}
             className={cn(
-              'anim-in pointer-events-auto flex items-start gap-3 rounded-xl border bg-[#0b1019]/95 px-3.5 py-3 text-[12px] font-medium text-slate-200 shadow-2xl shadow-black/50 backdrop-blur-xl',
+              'anim-in pointer-events-auto flex items-start gap-3 rounded-xl border bg-[#0b1019]/95 px-3.5 py-3 text-[14px] font-medium text-slate-200 shadow-2xl shadow-black/50 backdrop-blur-xl',
               style.className
             )}
           >
