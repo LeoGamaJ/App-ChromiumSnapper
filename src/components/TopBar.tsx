@@ -8,6 +8,7 @@ import {
   Square,
 } from 'lucide-react';
 import { cn, Spinner } from './ui';
+import { UserMenu } from './UserMenu';
 
 interface TopBarProps {
   urlCount: number;
@@ -15,12 +16,17 @@ interface TopBarProps {
   isRunning: boolean;
   isFocusMode: boolean;
   isConfigOpen: boolean;
+  aiConfigured: boolean;
+  aiModel: string;
+  reportCount: number;
   onCapture: () => void;
   onStop: () => void;
   onShowShortcuts: () => void;
   onToggleFocus: () => void;
   onToggleConfig: () => void;
   onNavigateHome: () => void;
+  onOpenAiSettings: () => void;
+  onOpenReports: () => void;
 }
 
 export function TopBar({
@@ -29,12 +35,17 @@ export function TopBar({
   isRunning,
   isFocusMode,
   isConfigOpen,
+  aiConfigured,
+  aiModel,
+  reportCount,
   onCapture,
   onStop,
   onShowShortcuts,
   onToggleFocus,
   onToggleConfig,
   onNavigateHome,
+  onOpenAiSettings,
+  onOpenReports,
 }: TopBarProps) {
   return (
     <header className="relative z-40 flex h-[54px] shrink-0 items-center gap-2 border-b border-white/[0.07] bg-[#060910]/95 px-3 lg:gap-3 lg:px-4">
@@ -91,6 +102,14 @@ export function TopBar({
         </button>
 
         <span className="mx-0.5 hidden h-5 w-px bg-white/[0.08] lg:block" aria-hidden="true" />
+
+        <UserMenu
+          aiConfigured={aiConfigured}
+          aiModel={aiModel}
+          reportCount={reportCount}
+          onOpenAiSettings={onOpenAiSettings}
+          onOpenReports={onOpenReports}
+        />
 
         <button
           type="button"

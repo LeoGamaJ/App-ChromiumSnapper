@@ -22,6 +22,7 @@ import {
   Plus,
   RefreshCw,
   ScanLine,
+  Sparkles,
   Trash2,
   X,
 } from 'lucide-react';
@@ -69,6 +70,8 @@ interface ResultsPanelProps {
   onClear: () => void;
   onAddExamples: () => void;
   onRename: (item: CapturedItem) => void;
+  onDevReport: (item: CapturedItem) => void;
+  hasDevReport: (item: CapturedItem) => boolean;
   onShowShortcuts: () => void;
   showInspectorToggle: boolean;
   isInspectorOpen: boolean;
@@ -104,6 +107,8 @@ export function ResultsPanel({
   onClear,
   onAddExamples,
   onRename,
+  onDevReport,
+  hasDevReport,
   onShowShortcuts,
   showInspectorToggle,
   isInspectorOpen,
@@ -383,6 +388,8 @@ export function ResultsPanel({
                     onCopy={onCopy}
                     onRemove={onRemove}
                     onRename={onRename}
+                    onDevReport={onDevReport}
+                    hasDevReport={hasDevReport(item)}
                   />
                 );
               })}
@@ -395,7 +402,7 @@ export function ResultsPanel({
       <footer className="flex h-8 shrink-0 items-center justify-between gap-3 border-t border-white/[0.06] bg-[#070a11] px-3 text-[11.5px] text-slate-400 lg:px-4">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400/80" />
-          <span className="truncate">Processamento local — suas imagens não saem da máquina.</span>
+          <span className="truncate">Capturas locais — relatórios Dev usam a API DeepSeek sob demanda.</span>
         </span>
         <span className="flex shrink-0 items-center gap-2.5 font-mono">
           <span className="hidden sm:inline">
@@ -409,7 +416,7 @@ export function ResultsPanel({
             </>
           )}
           <span className="hidden text-slate-700 md:inline">·</span>
-          <span className="hidden md:inline">Chromium Snapper v1.1</span>
+          <span className="hidden md:inline">Chromium Snapper v1.2</span>
         </span>
       </footer>
     </div>
@@ -580,7 +587,7 @@ function EmptyCanvas({
           {[
             { number: '01', label: 'Cole as URLs', hint: 'até 50 por lote' },
             { number: '02', label: 'Ajuste a captura', hint: 'viewport e saída' },
-            { number: '03', label: 'Revise no canvas', hint: 'ZIP ou arquivo único' },
+            { number: '03', label: 'Revise no canvas', hint: 'ZIP ou Relatório Dev' },
           ].map((step) => (
             <div
               key={step.number}
@@ -671,6 +678,8 @@ function CaptureCard({
   onCopy,
   onRemove,
   onRename,
+  onDevReport,
+  hasDevReport,
 }: {
   item: CapturedItem;
   isSelected: boolean;
@@ -680,6 +689,8 @@ function CaptureCard({
   onCopy: (item: CapturedItem) => void;
   onRemove: (id: string) => void;
   onRename: (item: CapturedItem) => void;
+  onDevReport: (item: CapturedItem) => void;
+  hasDevReport: boolean;
 }) {
   return (
     <article
@@ -812,6 +823,34 @@ function CaptureCard({
             Baixar
           </button>
         </div>
+
+        <button
+          type="button"
+          onClick={() => onDevReport(item)}
+          className={cn(
+            'btn btn-sm mt-1.5 w-full border',
+            hasDevReport
+              ? 'border-emerald-400/25 bg-emerald-400/[0.07] text-emerald-200 hover:border-emerald-400/45'
+              : 'border-indigo-400/25 bg-indigo-400/[0.06] text-indigo-200 hover:border-indigo-400/45 hover:bg-indigo-400/[0.1]'
+          )}
+          title={
+            hasDevReport
+              ? 'Abrir o relatório Dev gerado para esta página'
+              : 'Gerar relatório de engenharia reversa com a IA'
+          }
+        >
+          {hasDevReport ? (
+            <Check className="h-3.5 w-3.5" />
+          ) : (
+            <Sparkles className="h-3.5 w-3.5" />
+          )}
+          {hasDevReport ? 'Abrir relatório Dev' : 'Obter relatório Dev'}
+          {hasDevReport && (
+            <span className="rounded border border-emerald-400/25 bg-emerald-400/10 px-1 py-0.5 font-mono text-[9.5px] font-bold uppercase tracking-wide">
+              IA
+            </span>
+          )}
+        </button>
       </div>
     </article>
   );

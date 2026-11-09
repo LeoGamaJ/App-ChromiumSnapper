@@ -16,6 +16,7 @@ import {
   PanelRightOpen,
   RefreshCw,
   ScanLine,
+  Sparkles,
   Trash2,
   X,
 } from 'lucide-react';
@@ -54,6 +55,8 @@ interface InspectorProps {
   onRemove: (id: string) => void;
   onRetry: (item: CapturedItem) => void;
   onRename: (item: CapturedItem) => void;
+  onDevReport: (item: CapturedItem) => void;
+  hasDevReport: (item: CapturedItem) => boolean;
   onCollapse?: () => void;
   className?: string;
 }
@@ -80,6 +83,8 @@ export function Inspector({
   onRemove,
   onRetry,
   onRename,
+  onDevReport,
+  hasDevReport,
   onCollapse,
   className,
 }: InspectorProps) {
@@ -166,6 +171,8 @@ export function Inspector({
               onCopy={onCopy}
               onRemove={onRemove}
               onRename={onRename}
+              onDevReport={onDevReport}
+              hasDevReport={hasDevReport(selected)}
             />
           )
         ) : (
@@ -199,6 +206,8 @@ function CaptureDetails({
   onCopy,
   onRemove,
   onRename,
+  onDevReport,
+  hasDevReport,
 }: {
   item: CapturedItem;
   items: CapturedItem[];
@@ -208,6 +217,8 @@ function CaptureDetails({
   onCopy: (item: CapturedItem) => void;
   onRemove: (id: string) => void;
   onRename: (item: CapturedItem) => void;
+  onDevReport: (item: CapturedItem) => void;
+  hasDevReport: boolean;
 }) {
   const others = items
     .filter((candidate) => candidate.id !== item.id && !isPending(candidate))
@@ -298,6 +309,29 @@ function CaptureDetails({
         >
           <Maximize2 className="h-3.5 w-3.5" />
           Abrir prévia ampliada
+        </button>
+        <button
+          type="button"
+          onClick={() => onDevReport(item)}
+          className={cn(
+            'btn btn-secondary w-full justify-start py-2 text-[13.5px]',
+            hasDevReport
+              ? 'border-emerald-400/25 text-emerald-200 hover:border-emerald-400/45'
+              : 'border-indigo-400/25 text-indigo-200 hover:border-indigo-400/45'
+          )}
+          title={
+            hasDevReport
+              ? 'Abrir relatório Dev desta página'
+              : 'Gerar relatório de engenharia reversa com a IA'
+          }
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          {hasDevReport ? 'Abrir relatório Dev' : 'Obter relatório Dev'}
+          {hasDevReport && (
+            <span className="ml-auto rounded border border-emerald-400/25 bg-emerald-400/10 px-1 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wide">
+              IA
+            </span>
+          )}
         </button>
         <div className="grid grid-cols-2 gap-1.5">
           <button

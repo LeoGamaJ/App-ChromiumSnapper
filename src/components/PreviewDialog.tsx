@@ -6,6 +6,7 @@ import {
   Download,
   FileText,
   Maximize2,
+  Sparkles,
   X,
   ZoomIn,
   ZoomOut,
@@ -27,6 +28,8 @@ interface PreviewDialogProps {
   onNavigate: (item: CapturedItem) => void;
   onDownload: (item: CapturedItem) => void;
   onCopy: (item: CapturedItem) => void;
+  onDevReport: (item: CapturedItem) => void;
+  hasDevReport: boolean;
 }
 
 type Zoom = 'fit' | number;
@@ -38,6 +41,8 @@ export function PreviewDialog({
   onNavigate,
   onDownload,
   onCopy,
+  onDevReport,
+  hasDevReport,
 }: PreviewDialogProps) {
   const [zoom, setZoom] = useState<Zoom>('fit');
   const [naturalWidth, setNaturalWidth] = useState(0);
@@ -201,6 +206,27 @@ export function PreviewDialog({
               <span className="hidden lg:inline">Copiar</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => onDevReport(item)}
+            className={cn(
+              'btn btn-secondary btn-sm border',
+              hasDevReport
+                ? 'border-emerald-400/25 text-emerald-200 hover:border-emerald-400/45'
+                : 'border-indigo-400/25 text-indigo-200 hover:border-indigo-400/45'
+            )}
+            title={
+              hasDevReport
+                ? 'Abrir relatório Dev desta captura'
+                : 'Gerar relatório Dev com a IA'
+            }
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span className="hidden xl:inline">
+              {hasDevReport ? 'Abrir relatório' : 'Relatório Dev'}
+            </span>
+          </button>
 
           <button
             type="button"

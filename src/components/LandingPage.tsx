@@ -477,22 +477,22 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                   <Lock className="h-6 w-6" />
                 </div>
                 <h3 className="mt-5 text-[18.5px] font-bold tracking-[-0.01em] text-white">
-                  Privacidade Absoluta e Isolamento Local
+                  Privacidade por padrão, IA sob demanda
                 </h3>
                 <p className="mt-3 text-[16px] leading-relaxed text-slate-400">
-                  Seus dados nunca passam por servidores de terceiros. Dashboards internos, páginas de
-                  desenvolvimento em `localhost` e áreas autenticadas de clientes são processadas
-                  diretamente no ambiente local com total conformidade de segurança.
+                  Suas capturas são processadas localmente. A IA entra apenas quando você pede um
+                  Relatório Dev: o dossiê técnico e as imagens da viewport são enviados à API
+                  DeepSeek que você configurar, com chave e modelo sob seu controle.
                 </p>
                 <div className="mt-6 flex flex-wrap gap-2 text-[12.5px] font-mono text-slate-400">
                   <span className="rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1">
-                    Zero Transmissão Externa
+                    Capturas locais
+                  </span>
+                  <span className="rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1">
+                    Envio explícito à DeepSeek
                   </span>
                   <span className="rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1">
                     Compatível com Intranets
-                  </span>
-                  <span className="rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1">
-                    Bypass de Autenticação Segura
                   </span>
                 </div>
               </div>
@@ -669,7 +669,11 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                 },
                 {
                   q: 'O processamento consome servidores externos?',
-                  a: 'Não. O processamento é 100% local ou executado em seu nó dedicado Chromium. Nenhuma informação ou imagem trafega por servidores de terceiros.',
+                  a: 'As capturas são processadas localmente no Chromium. A única exceção é o Relatório Dev opcional: ao gerá-lo, o dossiê técnico da página e as imagens da viewport são enviados à API DeepSeek que você configurar.',
+                },
+                {
+                  q: 'Como funciona o Relatório Dev?',
+                  a: 'Cada captura ganha a ação "Obter relatório Dev". A IA analisa DOM, CSSOM, tipografia, cores, grid, componentes e as imagens da página para produzir um relatório de engenharia reversa com blueprint de replicação, tokens e checklist. O documento abre na aplicação e pode ser baixado em TXT ou PDF.',
                 },
                 {
                   q: 'Quantas URLs posso processar por lote?',

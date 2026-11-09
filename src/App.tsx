@@ -9,9 +9,19 @@ import { TopBar } from './components/TopBar';
 import { Inspector, InspectorDrawer, InspectorRail } from './components/Inspector';
 import { LeaveDialog } from './components/LeaveDialog';
 import { RenameDialog } from './components/RenameDialog';
+import { AISettingsDialog } from './components/AISettingsDialog';
+import { DevReportDialog } from './components/DevReportDialog';
+import { ReportsDialog } from './components/ReportsDialog';
 import { ToastStack, type ToastAction, type ToastItem, type ToastKind } from './components/ui';
 import { usePersistentState } from './hooks/usePersistentState';
 import { useMediaQuery } from './hooks/useMediaQuery';
+import {
+  DEFAULT_AI_SETTINGS,
+  isAiConfigured,
+  type AiSettings,
+  type AiStatusResponse,
+  type DevReportRecord,
+} from './lib/devReport';
 import {
   DEFAULT_SETTINGS,
   DEFAULT_URLS,
@@ -28,6 +38,15 @@ import {
   type LastRun,
   type RunProgress,
 } from './lib/snapper';
+
+function comparableUrl(url: string): string {
+  return url
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .replace(/\/+$/, '');
+}
 
 function getInitialUrls(): string {
   try {
@@ -94,6 +113,68 @@ export default function App() {
   const settings = useMemo<CaptureSettings>(
     () => ({ ...DEFAULT_SETTINGS, ...storedSettings }),
     [storedSettings]
+  );
+
+  /* --------------------------------- IA / Dev Report ------------------------ */
+
+  const [storedAiSettings, setStoredAiSettings] = usePersistentState<AiSettings>(
+    'snapper.v2.aiSettings',
+    DEFAULT_AI_SETTINGS
+  );
+  const aiSettings = useMemo<AiSettings>(
+    () => ({ ...DEFAULT_AI_SETTINGS, ...storedAiSettings }),
+    [storedAiSettings]
+  );
+  const [aiStatus, setAiStatus] = useState<AiStatusResponse | null>(null);
+  const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
+  const [reportsOpen, setReportsOpen] = useState(false);
+  const [devReports, setDevReports] = usePersistentState<DevReportRecord[]>(
+    'snapper.v2.devReports',
+    []
+  );
+  const [reportTarget, setReportTarget] = useState<{
+    url: string;
+    item?: CapturedItem;
+    existing?: DevReportRecord;
+  } | null>(null);
+  const pendingReportRef = useRef<{ url: string; item?: CapturedItem } | null>(null);
+
+  const serverKeyAvailable = Boolean(aiStatus?.hasServerKey);
+  const aiConfigured = isAiConfigured(aiSettings, serverKeyAvailable);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/ai/status')
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (!cancelled && payload) setAiStatus(payload as AiStatusResponse);
+      })
+      .catch(() => {
+        // O status do servidor é opcional; a chave local continua funcionando.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const reportsByUrl = useMemo(() => {
+    const map = new Map<string, DevReportRecord>();
+    if (!Array.isArray(devReports)) return map;
+    for (const report of devReports) {
+      const key = comparableUrl(report.url);
+      if (!map.has(key)) map.set(key, report);
+    }
+    return map;
+  }, [devReports]);
+
+  const safeReports = useMemo(
+    () => (Array.isArray(devReports) ? devReports : []),
+    [devReports]
+  );
+
+  const hasDevReport = useCallback(
+    (item: CapturedItem) => reportsByUrl.has(comparableUrl(item.url)),
+    [reportsByUrl]
   );
 
   const initialUrls = useMemo(getInitialUrls, []);
@@ -196,6 +277,96 @@ export default function App() {
     return () => {
       timers.forEach((timer) => window.clearTimeout(timer));
     };
+  }, []);
+
+  const notify = useCallback(
+    (message: string, kind: ToastKind = 'info') => {
+      pushToast(message, kind);
+    },
+    [pushToast]
+  );
+
+  const handleDevReport = useCallback(
+    (target: { url: string; item?: CapturedItem }) => {
+      const existing = reportsByUrl.get(comparableUrl(target.url));
+      setReportsOpen(false);
+      if (existing) {
+        setReportTarget({ url: existing.url, item: target.item, existing });
+        return;
+      }
+      if (!aiConfigured) {
+        pendingReportRef.current = target;
+        setAiSettingsOpen(true);
+        pushToast(
+          'Configure a API de IA (DeepSeek) para gerar o relatório Dev desta captura.',
+          'info'
+        );
+        return;
+      }
+      setReportTarget(target);
+    },
+    [aiConfigured, pushToast, reportsByUrl]
+  );
+
+  const handleSaveAiSettings = useCallback(
+    (next: AiSettings) => {
+      setStoredAiSettings(next);
+      setAiSettingsOpen(false);
+      const pending = pendingReportRef.current;
+      if (pending) {
+        pendingReportRef.current = null;
+        if (isAiConfigured(next, serverKeyAvailable)) {
+          setReportTarget(pending);
+        }
+      }
+    },
+    [serverKeyAvailable, setStoredAiSettings]
+  );
+
+  const handleDevReportSaved = useCallback(
+    (record: DevReportRecord) => {
+      setDevReports((previous) => {
+        const next = [
+          record,
+          ...previous.filter(
+            (entry) =>
+              entry.id !== record.id &&
+              comparableUrl(entry.url) !== comparableUrl(record.url)
+          ),
+        ];
+        return next.slice(0, 12);
+      });
+      pushToast('Relatório Dev salvo no histórico local.', 'success');
+    },
+    [pushToast, setDevReports]
+  );
+
+  const handleDeleteReport = useCallback(
+    (id: string) => {
+      setDevReports((previous) => previous.filter((report) => report.id !== id));
+      pushToast('Relatório Dev removido do histórico.', 'info');
+    },
+    [pushToast, setDevReports]
+  );
+
+  const handleOpenReportRecord = useCallback((report: DevReportRecord) => {
+    setReportsOpen(false);
+    setReportTarget({ url: report.url, existing: report });
+  }, []);
+
+  const handleOpenAiSettings = useCallback(() => {
+    setReportsOpen(false);
+    setAiSettingsOpen(true);
+  }, []);
+
+  const handleCloseAiSettings = useCallback(() => {
+    pendingReportRef.current = null;
+    setAiSettingsOpen(false);
+  }, []);
+
+  const handleOpenReports = useCallback(() => {
+    setAiSettingsOpen(false);
+    setReportsOpen(true);
   }, []);
 
   useEffect(() => {
@@ -953,7 +1124,16 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (view !== 'app' || previewId || shortcutsOpen) return;
+      if (
+        view !== 'app' ||
+        previewId ||
+        shortcutsOpen ||
+        aiSettingsOpen ||
+        reportsOpen ||
+        reportTarget
+      ) {
+        return;
+      }
       const target = event.target as HTMLElement | null;
       const typing =
         target?.tagName === 'INPUT' ||
@@ -979,7 +1159,17 @@ export default function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [configOpen, previewId, runCapture, shortcutsOpen, urls, view]);
+  }, [
+    aiSettingsOpen,
+    configOpen,
+    previewId,
+    reportTarget,
+    reportsOpen,
+    runCapture,
+    shortcutsOpen,
+    urls,
+    view,
+  ]);
 
   /* --------------------------------- Render --------------------------------- */
 
@@ -1008,6 +1198,9 @@ export default function App() {
         isRunning={isRunning}
         isFocusMode={focusMode}
         isConfigOpen={configOpen}
+        aiConfigured={aiConfigured}
+        aiModel={aiSettings.model}
+        reportCount={safeReports.length}
         onCapture={handleRun}
         onStop={handleStop}
         onShowShortcuts={handleShowShortcuts}
@@ -1017,6 +1210,8 @@ export default function App() {
           setConfigOpen((previous) => !previous);
         }}
         onNavigateHome={requestLeave}
+        onOpenAiSettings={handleOpenAiSettings}
+        onOpenReports={handleOpenReports}
       />
 
       <div className="relative flex min-h-0 flex-1">
@@ -1110,6 +1305,8 @@ export default function App() {
             onZipCancel={handleZipCancel}
             onClear={handleClear}
             onRename={handleRename}
+            onDevReport={(item) => handleDevReport({ url: item.url, item })}
+            hasDevReport={hasDevReport}
             onAddExamples={handleAddExamples}
             onShowShortcuts={handleShowShortcuts}
             showInspectorToggle={!focusMode}
@@ -1146,6 +1343,8 @@ export default function App() {
                 onRemove={handleRemove}
                 onRetry={handleRetry}
                 onRename={handleRename}
+                onDevReport={(item) => handleDevReport({ url: item.url, item })}
+                hasDevReport={hasDevReport}
                 onCollapse={() => setInspectorCollapsed(true)}
               />
             </div>
@@ -1169,6 +1368,8 @@ export default function App() {
           onRemove={handleRemove}
           onRetry={handleRetry}
           onRename={handleRename}
+          onDevReport={(item) => handleDevReport({ url: item.url, item })}
+          hasDevReport={hasDevReport}
           onClose={() => setInspectorOpen(false)}
         />
       )}
@@ -1184,6 +1385,8 @@ export default function App() {
           }}
           onDownload={handleDownloadSingle}
           onCopy={handleCopyImage}
+          onDevReport={(item) => handleDevReport({ url: item.url, item })}
+          hasDevReport={hasDevReport(previewItem)}
         />
       )}
 
@@ -1206,6 +1409,40 @@ export default function App() {
       )}
 
       {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
+
+      {aiSettingsOpen && (
+        <AISettingsDialog
+          settings={aiSettings}
+          serverStatus={aiStatus}
+          onSave={handleSaveAiSettings}
+          onClose={handleCloseAiSettings}
+          onNotify={notify}
+        />
+      )}
+
+      {reportsOpen && (
+        <ReportsDialog
+          reports={safeReports}
+          onOpen={handleOpenReportRecord}
+          onDelete={handleDeleteReport}
+          onClose={() => setReportsOpen(false)}
+        />
+      )}
+
+      {reportTarget && (
+        <DevReportDialog
+          key={`${reportTarget.existing?.id ?? 'new'}-${comparableUrl(reportTarget.url)}`}
+          item={reportTarget.item}
+          url={reportTarget.url}
+          existing={reportTarget.existing}
+          aiSettings={aiSettings}
+          captureSettings={settings}
+          onClose={() => setReportTarget(null)}
+          onSaved={handleDevReportSaved}
+          onOpenAiSettings={handleOpenAiSettings}
+          onNotify={notify}
+        />
+      )}
 
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
