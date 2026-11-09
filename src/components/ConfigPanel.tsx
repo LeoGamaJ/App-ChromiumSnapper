@@ -39,6 +39,8 @@ import {
   clamp,
   countDuplicates,
   dedupeUrls,
+  hostOf,
+  pathOf,
   previewFileName,
   type CaptureSettings,
   type ColorScheme,
@@ -142,27 +144,50 @@ export function ConfigPanel({
       aria-label="Configuração da captura"
     >
       {/* Header */}
-      <div className="shrink-0 border-b border-white/[0.06] px-4 pb-3 pt-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] border border-amber-400/25 bg-gradient-to-b from-amber-400/[0.16] to-amber-400/[0.04] text-amber-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+      <div className="shrink-0 px-4 pt-3.5">
+        <div className="flex items-start justify-between gap-2.5">
+          <div className="flex min-w-0 items-start gap-2.5">
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] border border-amber-400/25 bg-gradient-to-b from-amber-400/[0.16] to-amber-400/[0.04] text-amber-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
               <SlidersHorizontal className="h-4 w-4" />
             </span>
             <div className="min-w-0">
               <h2 className="truncate text-[15px] font-bold tracking-[-0.01em] text-white">
                 Configuração do lote
               </h2>
-              <p className="mt-0.5 truncate text-[12px] text-slate-400">
-                Fila, viewport e formato de saída.
+              <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11.5px] text-slate-400">
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'h-1.5 w-1.5 shrink-0 rounded-full',
+                    canRun ? 'bg-emerald-400/80' : 'bg-amber-400/80'
+                  )}
+                />
+                <span className="truncate">
+                  {urls.length} {urls.length === 1 ? 'link' : 'links'} · {formatLabel} ·{' '}
+                  <span className="font-mono">
+                    {settings.width}×{settings.height}
+                  </span>
+                </span>
               </p>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-0.5">
+
+          <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-white/[0.06] bg-white/[0.02] p-0.5">
+            <button
+              type="button"
+              onClick={onReset}
+              disabled={isRunning}
+              className="btn btn-ghost btn-icon h-7 w-7 rounded-md text-slate-400 hover:text-white"
+              title="Restaurar configurações padrão"
+              aria-label="Restaurar configurações padrão"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </button>
             {onCollapse && (
               <button
                 type="button"
                 onClick={onCollapse}
-                className="btn btn-ghost btn-icon hidden h-7 w-7 text-slate-400 hover:text-slate-200 lg:inline-flex"
+                className="btn btn-ghost btn-icon hidden h-7 w-7 rounded-md text-slate-400 hover:text-white lg:inline-flex"
                 title="Recolher configuração"
                 aria-label="Recolher configuração"
                 aria-controls="config-panel"
@@ -171,21 +196,11 @@ export function ConfigPanel({
                 <PanelLeftClose className="h-4 w-4" />
               </button>
             )}
-            <button
-              type="button"
-              onClick={onReset}
-              disabled={isRunning}
-              className="btn btn-ghost btn-icon h-7 w-7 text-slate-400 hover:text-slate-200"
-              title="Restaurar configurações padrão"
-              aria-label="Restaurar configurações padrão"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-            </button>
             {onClose && (
               <button
                 type="button"
                 onClick={onClose}
-                className="btn btn-ghost btn-icon h-7 w-7 text-slate-400 hover:text-white lg:hidden"
+                className="btn btn-ghost btn-icon h-7 w-7 rounded-md text-slate-400 hover:text-white lg:hidden"
                 aria-label="Fechar configuração"
               >
                 <X className="h-4 w-4" />
@@ -198,7 +213,8 @@ export function ConfigPanel({
         <div
           role="tablist"
           aria-label="Seções de configuração"
-          className="mt-3.5 grid grid-cols-4 gap-1 rounded-lg border border-white/[0.06] bg-black/30 p-1"
+          aria-orientation="horizontal"
+          className="mt-3 flex border-b border-white/[0.06]"
         >
           {CONFIG_TABS.map((item, index) => {
             const Icon = item.icon;
@@ -218,19 +234,25 @@ export function ConfigPanel({
                 onClick={() => onTabChange(item.id)}
                 onKeyDown={(event) => handleTabKeyDown(event, index)}
                 className={cn(
-                  'relative flex items-center justify-center gap-1.5 rounded-md px-1.5 py-1.5 text-[12.5px] font-semibold transition-colors',
+                  'relative flex min-w-0 flex-1 items-center justify-center gap-1 border-b-2 px-0.5 pb-2.5 pt-2 text-[11.5px] font-semibold transition-colors',
                   active
-                    ? 'bg-white/[0.08] text-white shadow-sm ring-1 ring-white/10'
-                    : 'text-slate-400 hover:bg-white/[0.03] hover:text-slate-300'
+                    ? 'border-amber-400 text-white'
+                    : 'border-transparent text-slate-400 hover:text-slate-200'
                 )}
               >
                 <Icon
-                  className={cn('h-3.5 w-3.5', active ? 'text-amber-400' : 'text-slate-400')}
+                  className={cn(
+                    'h-3.5 w-3.5 shrink-0',
+                    active ? 'text-amber-400' : 'text-slate-500'
+                  )}
                 />
-                <span>{item.label}</span>
+                <span className="truncate">{item.label}</span>
                 {item.id === 'advanced' &&
                   (settings.customHeaders.trim() || settings.customCookies.trim()) && (
-                    <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                    <span
+                      aria-hidden="true"
+                      className="h-1.5 w-1.5 rounded-full bg-emerald-400"
+                    />
                   )}
               </button>
             );
@@ -273,21 +295,27 @@ export function ConfigPanel({
       </div>
 
       {/* Footer / run bar */}
-      <div className="shrink-0 border-t border-white/[0.06] bg-[#070a11]/80 px-4 py-3.5">
-        <div className="mb-2.5 flex items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <span className={cn('chip', canRun ? 'chip-amber' : '')}>
-              <Link2 />
+      <div className="shrink-0 border-t border-white/[0.06] bg-[#070a11]/80 px-4 py-3">
+        <div className="mb-2 flex items-center justify-between gap-2 text-[11px] text-slate-400">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className={cn(
+                'h-1.5 w-1.5 shrink-0 rounded-full',
+                canRun ? 'bg-emerald-400/80' : 'bg-slate-500'
+              )}
+            />
+            <span className="truncate font-mono">
               {urls.length} {urls.length === 1 ? 'link' : 'links'}
-            </span>
-            <span className="chip">{formatLabel}</span>
-            <span className="chip font-mono">
+              <span className="px-1 text-slate-600">·</span>
+              {formatLabel}
+              <span className="px-1 text-slate-600">·</span>
               {settings.width}×{settings.height}
             </span>
-            <span className="chip hidden 2xl:inline-flex">
-              {settings.fullPage ? 'Full-page' : 'Viewport'}
-            </span>
-          </div>
+          </span>
+          <span className="shrink-0 rounded border border-white/[0.07] bg-white/[0.02] px-1.5 py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-[0.06em] text-slate-400">
+            {settings.fullPage ? 'full-page' : 'viewport'}
+          </span>
         </div>
 
         <button
@@ -316,7 +344,6 @@ export function ConfigPanel({
             </>
           )}
         </button>
-
       </div>
     </section>
   );
@@ -342,45 +369,62 @@ function LinksTab({
   isRunning: boolean;
 }) {
   return (
-    <div className="space-y-3.5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <label htmlFor="url-list" className="label">
-            URLs de destino
-          </label>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-slate-400">
-            Uma URL por linha — o protocolo é detectado automaticamente.
-          </p>
+    <div className="space-y-4">
+      <div className="rounded-xl border border-white/[0.07] bg-white/[0.015] p-3">
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <label htmlFor="url-list" className="label">
+              URLs de destino
+            </label>
+            <p className="mt-0.5 text-[11.5px] leading-relaxed text-slate-400">
+              Uma URL por linha.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <span className={cn('chip', overLimit && 'chip-rose')}>
+              {urls.length} / {MAX_URLS}
+            </span>
+            <button
+              type="button"
+              onClick={onClearUrls}
+              disabled={isRunning || rawUrls.length === 0}
+              className="flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-slate-500 transition-colors hover:bg-rose-400/10 hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-40"
+              title="Limpar lista de URLs"
+              aria-label="Limpar lista de URLs"
+            >
+              <Trash2 className="h-3 w-3" />
+              Limpar
+            </button>
+          </div>
         </div>
-        <span className={cn('chip', overLimit && 'chip-rose')}>
-          {urls.length} / {MAX_URLS}
-        </span>
-      </div>
 
-      <div className="relative">
         <textarea
           id="url-list"
           value={rawUrls}
           onChange={(event) => onRawUrlsChange(event.target.value)}
           placeholder={'exemplo.com\nhttps://github.com\nuol.com.br'}
-          rows={8}
+          rows={7}
           spellCheck={false}
           autoCapitalize="none"
           autoCorrect="off"
           disabled={isRunning}
           aria-describedby="url-list-hint"
-          className="field h-[190px] w-full resize-none px-3.5 py-3 font-mono text-[14.5px] leading-[1.85] text-slate-200 placeholder:text-slate-400"
+          className="field h-[176px] w-full resize-none px-3 py-2.5 font-mono text-[13.5px] leading-[1.8] text-slate-200 placeholder:text-slate-400"
         />
-        <div className="pointer-events-none absolute bottom-2.5 right-3 flex items-center gap-1.5 rounded-md bg-[#070b12]/80 px-1.5 py-0.5 font-mono text-[11.5px] text-slate-400 backdrop-blur">
-          <span className={cn(urls.length > 0 ? 'text-amber-400/90' : '')}>{urls.length}</span>
-          <span>linhas</span>
-        </div>
+
+        <p
+          id="url-list-hint"
+          className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-slate-500"
+        >
+          <Code2 className="mt-0.5 h-3 w-3 shrink-0" />
+          Aceita domínios sem protocolo, rotas internas e parâmetros de query.
+        </p>
       </div>
 
       {(duplicates > 0 || overLimit) && (
         <div
           className={cn(
-            'flex items-start justify-between gap-3 rounded-xl border px-3 py-2 text-[12.5px]',
+            'flex items-start justify-between gap-3 rounded-xl border px-3 py-2 text-[12px]',
             overLimit
               ? 'border-rose-400/25 bg-rose-400/[0.06] text-rose-200'
               : 'border-amber-400/20 bg-amber-400/[0.06] text-amber-200'
@@ -406,19 +450,11 @@ function LinksTab({
       )}
 
       <div>
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-            Presets rápidos
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-[0.13em] text-slate-500">
+            Modelos rápidos
           </span>
-          <button
-            type="button"
-            onClick={onClearUrls}
-            disabled={isRunning || rawUrls.length === 0}
-            className="flex items-center gap-1 text-[12.5px] font-medium text-slate-400 transition-colors hover:text-rose-300 disabled:opacity-40"
-          >
-            <Trash2 className="h-3 w-3" />
-            Limpar lista
-          </button>
+          <span className="text-[10.5px] text-slate-500">substituem a lista</span>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {QUICK_PRESETS.map((preset) => {
@@ -430,9 +466,9 @@ function LinksTab({
                 title={preset.hint}
                 onClick={() => onRawUrlsChange(preset.urls)}
                 disabled={isRunning}
-                className="group inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.02] px-2.5 py-1.5 text-[12.5px] font-medium text-slate-400 transition-colors hover:border-amber-400/30 hover:bg-amber-400/[0.06] hover:text-amber-200 disabled:opacity-50"
+                className="group inline-flex items-center gap-1.5 rounded-lg border border-white/[0.07] bg-white/[0.02] px-2.5 py-1.5 text-[12px] font-medium text-slate-400 transition-colors hover:border-amber-400/30 hover:bg-amber-400/[0.06] hover:text-amber-200 disabled:opacity-50"
               >
-                <Icon className="h-3.5 w-3.5 text-slate-400 transition-colors group-hover:text-amber-400" />
+                <Icon className="h-3.5 w-3.5 text-slate-500 transition-colors group-hover:text-amber-400" />
                 {preset.name}
               </button>
             );
@@ -440,10 +476,40 @@ function LinksTab({
         </div>
       </div>
 
-      <p id="url-list-hint" className="text-[12px] leading-relaxed text-slate-400">
-        <Code2 className="mr-1 inline h-3 w-3 align-[-2px]" />
-        Aceita domínios sem protocolo, rotas internas e parâmetros de query.
-      </p>
+      {urls.length > 0 && (
+        <div className="border-t border-white/[0.06] pt-3.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.13em] text-slate-500">
+              <Link2 className="h-3 w-3" />
+              Fila de captura
+            </span>
+            <span className="text-[10.5px] text-slate-500">
+              {urls.length} {urls.length === 1 ? 'pronta' : 'prontas'}
+            </span>
+          </div>
+          <ul className="mt-2 space-y-1">
+            {urls.slice(0, 3).map((url, index) => (
+              <li key={`${url}-${index}`} className="flex min-w-0 items-center gap-2">
+                <span className="w-4 shrink-0 text-right font-mono text-[9.5px] text-slate-600">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400/70" />
+                <span className="min-w-0 truncate text-[11.5px] font-medium text-slate-300">
+                  {hostOf(url)}
+                </span>
+                <span className="min-w-0 truncate text-[11px] text-slate-500">
+                  {pathOf(url)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {urls.length > 3 && (
+            <p className="mt-1.5 pl-6 text-[10.5px] text-slate-500">
+              +{urls.length - 3} {urls.length - 3 === 1 ? 'URL adicional' : 'URLs adicionais'}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -789,7 +855,7 @@ function OutputTab({
         <div className="mb-1.5 flex items-center justify-between">
           <label htmlFor="naming-pattern" className="label flex items-center gap-1.5">
             <Tag className="h-3 w-3" />
-            Nomenclatura do arquivo
+            Nome do arquivo
           </label>
           <span className="text-[11.5px] text-slate-400">tokens dinâmicos</span>
         </div>

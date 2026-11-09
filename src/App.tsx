@@ -1224,7 +1224,7 @@ export default function App() {
               className="fixed inset-0 top-[54px] z-40 bg-black/65 backdrop-blur-[2px]"
             />
             <aside
-              className="fixed inset-y-0 left-0 z-50 mt-[54px] flex w-[min(92vw,360px)] flex-col border-r border-white/[0.07] bg-[#080b12] shadow-2xl shadow-black/60"
+              className="fixed inset-y-0 left-0 z-50 mt-[54px] flex w-[min(92vw,360px)] flex-col overflow-hidden rounded-r-2xl border-r border-white/[0.07] bg-[#080b12] shadow-2xl shadow-black/60"
               aria-label="Painel de configuração"
             >
               <ConfigPanel

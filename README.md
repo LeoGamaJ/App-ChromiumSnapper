@@ -34,6 +34,7 @@
 - **Canvas profissional**: artboards com prévia, inspetor de metadados, filtros por falha, densidade de grade, prévia com zoom, navegação por teclado, cópia para clipboard, download individual e ZIP gerado no servidor.
 - **Workspace em canvas**: configuração em sidebar, área central de artboards, inspetor contextual persistente a partir de 1280 px (drawer abaixo disso), modo foco (`F`), drawer de configuração no mobile e fila visível com status por URL desde o início do lote.
 - **Painéis retráteis**: configuração e inspetor recolhem para rails com atalhos contextuais; o estado é persistido, o recolher/expandir fica no cabeçalho de cada painel e o inspetor em telas menores é aberto pela toolbar do canvas.
+- **Painel de configuração enxuto**: resumo vivo no cabeçalho (links, formato e viewport), abas com indicador âmbar, URLs agrupadas em card com contagem e limpeza contextual, fila de captura parseada e rodapé fixo com resumo do lote e CTA de captura.
 - **Persistência local** de configurações e URLs, atalhos de teclado e acessibilidade (foco visível, focus trap, `aria-live` e `prefers-reduced-motion`).
 - **Capturas 100% locais**: nenhuma imagem de captura sai da máquina. Somente quando o usuário solicita um **Relatório Dev** o dossiê técnico e as imagens da viewport são enviados à API DeepSeek configurada.
 
