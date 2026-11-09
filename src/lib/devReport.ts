@@ -519,7 +519,7 @@ export function reportHost(url: string): string {
 
 export function buildDevReportFileName(
   record: Pick<DevReportRecord, 'url' | 'createdAt'>,
-  extension: 'txt' | 'pdf' | 'json'
+  extension: 'txt' | 'pdf' | 'json' | 'md'
 ): string {
   const host = reportHost(record.url)
     .normalize('NFKD')
@@ -530,6 +530,37 @@ export function buildDevReportFileName(
   const date = new Date(record.createdAt);
   const stamp = Number.isNaN(date.getTime()) ? reportTimestampSlug() : reportTimestampSlug(date);
   return `relatorio-dev_${host || 'pagina'}_${stamp}.${extension}`;
+}
+
+function yamlString(value: string): string {
+  return `"${(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r?\n/g, ' ')}"`;
+}
+
+/** Documento Markdown pronto para versionamento, com frontmatter e anexo opcional. */
+export function formatReportAsMarkdown(
+  record: DevReportRecord,
+  appendixMarkdown?: string
+): string {
+  const frontmatter = [
+    '---',
+    `title: ${yamlString(record.title || reportHost(record.url))}`,
+    `url: ${yamlString(record.url)}`,
+    `model: ${yamlString(record.model)}`,
+    `createdAt: ${yamlString(record.createdAt)}`,
+    record.usage ? `tokens: ${record.usage.totalTokens}` : '',
+    '---',
+  ].filter(Boolean);
+
+  const body = record.markdown.trim();
+  const withTitle = /^#\s+/.test(body)
+    ? body
+    : `# ${record.title || reportHost(record.url)}\n\n${body}`;
+  const appendix =
+    appendixMarkdown && appendixMarkdown.trim()
+      ? `\n\n---\n\n## Anexo técnico\n\n${appendixMarkdown.trim()}`
+      : '';
+
+  return `${frontmatter.join('\n')}\n\n${withTitle}${appendix}\n`;
 }
 
 export function formatReportAsText(

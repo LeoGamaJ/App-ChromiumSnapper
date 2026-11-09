@@ -21,7 +21,7 @@
 
 ## Recursos
 
-- **Relatório Dev com IA (DeepSeek)**: cada captura bem-sucedida ganha a ação **Obter relatório Dev**. A IA recebe um dossiê extraído do navegador (DOM, CSSOM, tipografia, cores, grid, breakpoints, componentes, assets, stack e acessibilidade) e as imagens da viewport para produzir uma engenharia reversa completa, com blueprint de replicação, design tokens e checklist de fidelidade. O documento abre na aplicação em streaming e pode ser copiado ou baixado em **TXT** e **PDF**.
+- **Relatório Dev com IA (DeepSeek)**: cada captura bem-sucedida ganha a ação **Obter relatório Dev**. A IA recebe um dossiê extraído do navegador (DOM, CSSOM, tipografia, cores, grid, breakpoints, componentes, assets, stack e acessibilidade) e as imagens da viewport para produzir uma engenharia reversa completa, com blueprint de replicação, design tokens e checklist de fidelidade. O documento abre na aplicação em streaming e o menu **Exportar** oferece **Copiar**, **Markdown (.md)**, **TXT** e **PDF**.
 - **Seção de usuário no header**: menu antes de "Sair" com status da IA, acesso à **Configuração da API de IA** (chave DeepSeek, Base URL, modelo e profundidade de análise) e ao histórico local de **Relatórios Dev**. A chave pode vir do navegador ou de `DEEPSEEK_API_KEY` no servidor.
 - **Captura em lote** de até 50 URLs por execução, com progresso via Server-Sent Events, ETA e interrupção a qualquer momento.
 - **Viewport configurável**: presets Full HD, 4K, laptop, tablet e mobile, além de largura/altura personalizadas e emulação de `prefers-color-scheme`.
@@ -113,7 +113,7 @@ npm run start:prod
 2. O servidor abre uma página headless por URL, aplica headers/cookies/tema, aguarda fontes e mídia da hero, remove overlays intrusivos e faz um scroll progressivo com re-medição de altura para disparar lazy loads — inclusive seções que só crescem após o primeiro scroll.
 3. Cada captura é devolvida por SSE como `item_success` (metadados + thumbnail leve + URL do arquivo) ou `item_error`.
 4. A galeria recebe apenas uma thumbnail leve por item. O arquivo completo fica no store do servidor e é buscado sob demanda para prévia, cópia ou download; o ZIP é montado no servidor a partir desses buffers.
-5. O **Relatório Dev** abre a página novamente em Chromium, extrai um dossiê técnico estruturado, captura imagens da viewport e envia tudo para a API DeepSeek em streaming. O Markdown gerado é renderizado no diálogo e pode ser exportado em TXT (no navegador) ou PDF A4 (renderizado no Chromium do servidor).
+5. O **Relatório Dev** abre a página novamente em Chromium, extrai um dossiê técnico estruturado, captura imagens da viewport e envia tudo para a API DeepSeek em streaming. O Markdown gerado é renderizado no diálogo e pode ser exportado em Markdown, TXT (no navegador) ou PDF A4 (renderizado no Chromium do servidor) pelo menu Exportar.
 
 ## Relatório Dev (IA)
 
@@ -131,7 +131,7 @@ npm run start:prod
    - **Máxima**: esforço máximo e orçamento maior.
 3. Use **Testar conexão** para validar a chave, listar modelos e consultar o saldo da conta. O teste não gera tokens de resposta.
 4. Capture uma página e clique em **Obter relatório Dev** no artboard, na prévia ou no inspetor. A geração mostra as fases (navegação, extração, análise, redação), permite acompanhar o raciocínio e mantém o relatório no histórico local.
-5. No diálogo você pode abrir o relatório novamente, copiar o Markdown, baixar **TXT**/**PDF**, exportar os **dados técnicos em JSON** e anexar o dossiê bruto ao TXT/PDF.
+5. No diálogo você pode abrir o relatório novamente e usar o menu **Exportar** para **Copiar**, baixar **Markdown (.md)**, **TXT** ou **PDF**. Os **dados técnicos em JSON** ficam na aba Dados, e o dossiê bruto pode ser anexado aos downloads.
 
 **O que é enviado à DeepSeek:** o JSON com dados extraídos do DOM/CSSOM (título, metadados, seções, estilos computados, tipografia, paleta, componentes, assets, stack, acessibilidade e textos visíveis) e, quando o modelo aceita visão, até duas capturas da viewport. A chave fica em `localStorage` (ou em `DEEPSEEK_API_KEY` no servidor) e não é enviada a nenhum outro destino. Evite gerar relatórios de páginas com dados sensíveis.
 
@@ -148,7 +148,7 @@ npm run start:prod
 │   ├── index.css              # Design tokens, superfícies, botões, foco e estilos do relatório
 │   ├── lib/
 │   │   ├── snapper.ts         # Tipos, presets, tokens de nomenclatura e utilidades
-│   │   └── devReport.ts       # Tipos de IA, Markdown, exportação TXT/PDF e template de impressão
+│   │   └── devReport.ts       # Tipos de IA, Markdown, exportação TXT/MD/PDF e template de impressão
 │   ├── hooks/
 │   │   ├── usePersistentState.ts
 │   │   └── useFocusTrap.ts
@@ -157,7 +157,7 @@ npm run start:prod
 │       ├── TopBar.tsx
 │       ├── UserMenu.tsx       # Seção de usuário: API de IA e histórico de relatórios
 │       ├── AISettingsDialog.tsx # Chave DeepSeek, Base URL, modelo, profundidade e teste
-│       ├── DevReportDialog.tsx  # Relatório em streaming, visualização, TXT/PDF/JSON
+│       ├── DevReportDialog.tsx  # Relatório em streaming, visualização e menu Exportar (MD/TXT/PDF)
 │       ├── ReportsDialog.tsx    # Histórico local de relatórios
 │       ├── ConfigPanel.tsx    # Abas Links / Viewport / Saída / Avançado
 │       ├── ResultsPanel.tsx   # Status do lote, galeria, filtros e cards

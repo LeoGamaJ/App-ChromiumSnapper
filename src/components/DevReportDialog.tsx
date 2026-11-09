@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import {
   AlertTriangle,
   ArrowDown,
   BookOpen,
   Check,
+  ChevronDown,
   Clipboard,
   Copy,
   Download,
@@ -21,6 +23,7 @@ import {
   buildDevReportFileName,
   buildTechnicalAppendix,
   extractMarkdownHeadings,
+  formatReportAsMarkdown,
   formatReportAsText,
   renderMarkdownToHtml,
   reportHost,
@@ -30,6 +33,7 @@ import {
   type DevReportStageEvent,
   type DevReportUsage,
 } from '../lib/devReport';
+import type { LucideIcon } from 'lucide-react';
 import {
   formatClock,
   type CaptureSettings,
@@ -104,9 +108,12 @@ export function DevReportDialog({
   const [copied, setCopied] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [incomplete, setIncomplete] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const exportRef = useRef<HTMLDivElement>(null);
+  const exportButtonRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
@@ -133,6 +140,7 @@ export function DevReportDialog({
     setError(null);
     setIncomplete(false);
     setReasoningChars(0);
+    setExportOpen(false);
     setIsStreaming(true);
     setTab('report');
     setStage({ stage: 'connecting', message: 'Iniciando a análise da página...' });
@@ -350,19 +358,42 @@ export function DevReportDialog({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        abortRef.current?.abort();
-        onClose();
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      if (exportOpen) {
+        setExportOpen(false);
+        exportButtonRef.current?.focus();
+        return;
       }
+      abortRef.current?.abort();
+      onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, [exportOpen, onClose]);
 
   useEffect(() => {
     closeRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!exportOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!exportRef.current?.contains(event.target as Node)) setExportOpen(false);
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [exportOpen]);
+
+  useEffect(() => {
+    if (!exportOpen) return;
+    const timer = window.setTimeout(() => {
+      exportRef.current
+        ?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])')
+        ?.focus();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [exportOpen]);
 
   useEffect(() => {
     if (!follow || !isStreaming) return;
@@ -389,6 +420,26 @@ export function DevReportDialog({
         statusCode: meta.statusCode,
       }
     : null);
+
+  const handleExportKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const items = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(
+        '[role="menuitem"]:not([disabled])'
+      )
+    );
+    if (items.length === 0) return;
+    const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+    let nextIndex = 0;
+    if (event.key === 'End') nextIndex = items.length - 1;
+    else if (event.key === 'ArrowDown') {
+      nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % items.length;
+    } else if (event.key === 'ArrowUp') {
+      nextIndex = currentIndex <= 0 ? items.length - 1 : currentIndex - 1;
+    }
+    items[nextIndex]?.focus();
+  };
 
   const handleScroll = () => {
     const container = contentRef.current;
@@ -424,6 +475,16 @@ export function DevReportDialog({
       buildDevReportFileName(completed, 'txt')
     );
     onNotify('Download do relatório em TXT iniciado.', 'success');
+  };
+
+  const handleMarkdown = () => {
+    if (!completed) return;
+    const markdownText = formatReportAsMarkdown(completed, getAppendix());
+    downloadBlob(
+      new Blob([markdownText], { type: 'text/markdown;charset=utf-8' }),
+      buildDevReportFileName(completed, 'md')
+    );
+    onNotify('Download do relatório em Markdown iniciado.', 'success');
   };
 
   const handleJson = () => {
@@ -597,50 +658,110 @@ export function DevReportDialog({
           )}
 
           <div className="ml-auto flex items-center gap-1.5">
-            {Boolean(meta?.dossier) && (
+            <div ref={exportRef} className="relative">
               <button
+                ref={exportButtonRef}
                 type="button"
-                onClick={handleJson}
-                className="btn btn-ghost btn-sm hidden text-slate-400 hover:text-slate-200 sm:inline-flex"
-                title="Baixar os dados técnicos extraídos em JSON"
-                aria-label="Baixar dados técnicos em JSON"
+                onClick={() => setExportOpen((previous) => !previous)}
+                disabled={!markdown.trim()}
+                aria-haspopup="menu"
+                aria-expanded={exportOpen}
+                aria-controls="dev-report-export-menu"
+                className="btn btn-primary btn-sm gap-1.5"
+                title="Exportar relatório"
+                aria-label="Exportar relatório"
               >
-                <CodeIcon />
-                JSON
+                {pdfBusy ? (
+                  <Spinner className="h-3.5 w-3.5" />
+                ) : (
+                  <Download className="h-3.5 w-3.5" />
+                )}
+                <span>{pdfBusy ? 'Gerando PDF' : 'Exportar'}</span>
+                <ChevronDown
+                  className={cn(
+                    'h-3 w-3 transition-transform duration-150',
+                    exportOpen && 'rotate-180'
+                  )}
+                />
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => void handleCopy()}
-              disabled={!markdown.trim()}
-              className="btn btn-ghost btn-sm text-slate-300"
-              title="Copiar Markdown do relatório"
-              aria-label="Copiar Markdown do relatório"
-            >
-              {copied ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Copy className="h-3.5 w-3.5" />}
-              <span className="hidden lg:inline">{copied ? 'Copiado' : 'Copiar'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleTxt}
-              disabled={!completed}
-              className="btn btn-secondary btn-sm"
-              title="Baixar relatório em TXT"
-            >
-              <FileText className="h-3.5 w-3.5 text-amber-300" />
-              TXT
-            </button>
-            <button
-              type="button"
-              onClick={() => void handlePdf()}
-              disabled={!completed || pdfBusy}
-              className="btn btn-primary btn-sm"
-              title="Baixar relatório em PDF"
-              aria-label="Baixar relatório em PDF"
-            >
-              {pdfBusy ? <Spinner className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
-              <span className="hidden sm:inline">{pdfBusy ? 'Gerando' : 'PDF'}</span>
-            </button>
+
+              {exportOpen && (
+                <div
+                  id="dev-report-export-menu"
+                  role="menu"
+                  aria-label="Exportar relatório"
+                  onKeyDown={handleExportKeyDown}
+                  className="anim-in absolute right-0 top-[calc(100%+6px)] z-30 w-[min(78vw,272px)] overflow-hidden rounded-xl border border-white/[0.1] bg-[#0b1019]/98 p-1.5 shadow-2xl shadow-black/70 backdrop-blur-xl"
+                >
+                  <div className="flex items-center justify-between gap-2 px-1.5 pb-1.5 pt-0.5">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
+                      Exportar relatório
+                    </p>
+                    {includeTechnical && (
+                      <span className="rounded border border-amber-400/20 bg-amber-400/[0.08] px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-amber-300">
+                        + anexo
+                      </span>
+                    )}
+                  </div>
+
+                  <ExportMenuItem
+                    icon={copied ? Check : Copy}
+                    label={copied ? 'Copiado' : 'Copiar'}
+                    hint="Markdown na área de transferência"
+                    disabled={!markdown.trim()}
+                    onClick={() => {
+                      setExportOpen(false);
+                      void handleCopy();
+                    }}
+                  />
+                  <ExportMenuItem
+                    icon={FileCode2}
+                    label="Markdown"
+                    hint="Documento estruturado com frontmatter"
+                    trailing=".md"
+                    tone="sky"
+                    disabled={!completed}
+                    onClick={() => {
+                      setExportOpen(false);
+                      handleMarkdown();
+                    }}
+                  />
+                  <ExportMenuItem
+                    icon={FileText}
+                    label="Texto simples"
+                    hint="Compatível com qualquer editor"
+                    trailing=".txt"
+                    tone="amber"
+                    disabled={!completed}
+                    onClick={() => {
+                      setExportOpen(false);
+                      handleTxt();
+                    }}
+                  />
+                  <div className="my-1 h-px bg-white/[0.07]" />
+                  <ExportMenuItem
+                    icon={Download}
+                    label="PDF"
+                    hint="Documento A4 paginado"
+                    trailing=".pdf"
+                    tone="rose"
+                    disabled={!completed || pdfBusy}
+                    busy={pdfBusy}
+                    onClick={() => {
+                      setExportOpen(false);
+                      void handlePdf();
+                    }}
+                  />
+
+                  {!completed && (
+                    <p className="px-2.5 pb-1.5 pt-1 text-[10px] leading-relaxed text-slate-500">
+                      TXT, Markdown e PDF ficam disponíveis quando a geração terminar.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
             <button
               type="button"
               onClick={() => void startGeneration()}
@@ -759,6 +880,7 @@ export function DevReportDialog({
               <DataTab
                 dossier={metaRef.current?.dossier}
                 technical={effectiveTechnical}
+                onDownloadJson={handleJson}
                 onRegenerate={() => void startGeneration()}
                 onOpenAiSettings={onOpenAiSettings}
               />
@@ -797,9 +919,9 @@ export function DevReportDialog({
               onChange={(event) => setIncludeTechnical(event.target.checked)}
               className="h-3.5 w-3.5 rounded border-white/20 bg-black/40 accent-amber-500"
             />
-            Incluir anexo técnico no TXT/PDF
+            Incluir anexo técnico no TXT/MD/PDF
           </label>
-          <p className="min-w-0 flex-1 truncate text-[10.5px] text-slate-500">
+          <p className="hidden min-w-0 flex-1 truncate text-[10.5px] text-slate-500 sm:block">
             A análise é enviada à DeepSeek somente quando você solicita este relatório.
           </p>
           <span className="hidden font-mono text-[10.5px] text-slate-400 sm:inline">
@@ -815,8 +937,63 @@ export function DevReportDialog({
   );
 }
 
-function CodeIcon() {
-  return <FileCode2 className="h-3.5 w-3.5" />;
+function ExportMenuItem({
+  icon: Icon,
+  label,
+  hint,
+  trailing,
+  tone = 'slate',
+  onClick,
+  disabled,
+  busy,
+}: {
+  icon: LucideIcon;
+  label: string;
+  hint: string;
+  trailing?: string;
+  tone?: 'slate' | 'sky' | 'amber' | 'rose';
+  onClick: () => void;
+  disabled?: boolean;
+  busy?: boolean;
+}) {
+  const toneClass = {
+    slate: 'border-slate-400/20 bg-slate-400/10 text-slate-300',
+    sky: 'border-sky-400/20 bg-sky-400/10 text-sky-300',
+    amber: 'border-amber-400/20 bg-amber-400/10 text-amber-300',
+    rose: 'border-rose-400/20 bg-rose-400/10 text-rose-300',
+  }[tone];
+
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-white/[0.05] focus-visible:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      <span
+        className={cn(
+          'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border',
+          toneClass
+        )}
+      >
+        {busy ? <Spinner className="h-3.5 w-3.5" /> : <Icon className="h-3.5 w-3.5" />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[12.5px] font-semibold leading-snug text-slate-100">
+          {label}
+        </span>
+        <span className="mt-0.5 block text-[10.5px] leading-snug text-slate-500">
+          {hint}
+        </span>
+      </span>
+      {trailing && (
+        <span className="mt-1 shrink-0 rounded border border-white/[0.08] bg-black/25 px-1.5 py-0.5 font-mono text-[9.5px] font-semibold text-slate-400">
+          {trailing}
+        </span>
+      )}
+    </button>
+  );
 }
 
 function ReportMeta({
@@ -977,11 +1154,13 @@ function StreamingPlaceholder({
 function DataTab({
   dossier,
   technical,
+  onDownloadJson,
   onRegenerate,
   onOpenAiSettings,
 }: {
   dossier: unknown;
   technical: DevReportRecord['technical'] | null;
+  onDownloadJson: () => void;
   onRegenerate: () => void;
   onOpenAiSettings: () => void;
 }) {
@@ -1010,20 +1189,32 @@ function DataTab({
             </p>
           </div>
           {json && (
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(json);
-                  setCopied(true);
-                  window.setTimeout(() => setCopied(false), 1600);
-                } catch {}
-              }}
-              className="btn btn-secondary btn-sm"
-            >
-              {copied ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? 'Copiado' : 'Copiar JSON'}
-            </button>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(json);
+                    setCopied(true);
+                    window.setTimeout(() => setCopied(false), 1600);
+                  } catch {}
+                }}
+                className="btn btn-secondary btn-sm"
+              >
+                {copied ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? 'Copiado' : 'Copiar JSON'}
+              </button>
+              <button
+                type="button"
+                onClick={onDownloadJson}
+                className="btn btn-secondary btn-sm"
+                title="Baixar dados técnicos em JSON"
+                aria-label="Baixar dados técnicos em JSON"
+              >
+                <Download className="h-3.5 w-3.5 text-slate-400" />
+                JSON
+              </button>
+            </div>
           )}
         </div>
 
